@@ -7,14 +7,14 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 
 | Subsystem | Status | Likely driver / mechanism | Fix location | Notes |
 |-----------|--------|---------------------------|--------------|-------|
-| Boot (EFI handover) | 🟡 in progress | `CONFIG_EFI_MIXED` + handover proto | **kernel** | The whole reason for this repo; want `xloadflags=0x2f`. |
+| Boot (EFI handover) | ✅ works | `CONFIG_EFI_MIXED` + handover proto | **kernel** | xloadflags 0x3f; boots to OOBE. |
 | Display / KMS | untested | `i915` (Gen7 Valleyview) | kernel cfg + **cmdline** | Expect quirks; try `i915.enable_dc=0/psr=0`, or `nomodeset` fallback. Cmdline-only, no rebuild needed. |
 | Backlight / brightness | untested | `intel_backlight` / ACPI | kernel + **cmdline** | Try `acpi_backlight=native|vendor`. Common Bay Trail breakage. |
 | Panel rotation | untested | `i915` `fbcon=rotate:` + userspace | cmdline + userspace | Many Iconias have a natively-portrait panel. |
 | Wi-Fi | untested | likely `brcmfmac` (SDIO) or RTL | kernel + **firmware/rootfs** | Needs driver + `/lib/firmware/brcm/*.bin` + board `*.txt` NVRAM. |
 | Bluetooth | untested | `btbcm` / `hci_uart` | kernel + firmware | Paired with the Wi-Fi combo chip. |
-| Audio | untested | `snd_soc_sst_bytcr_rt5640` (or rt5651) | kernel + **UCM (rootfs)** | Needs SST driver + matching ALSA UCM board profile + DMI quirk. |
-| Touchscreen | untested | I2C-HID / `silead` / `goodix` | kernel + **DMI/DSDT quirk** | May need `silead,*` device props or a touchscreen DMI match. |
+| Audio | ❌ broken | `intel_sst` `bytcr_rt5640` | kernel + **firmware (rootfs)** | `fw_sst_0f28.bin` failed to load (-2); No soundcards found. Needs firmware + UCM. |
+| Touchscreen | ✅ works | I2C-HID (SYNA7300 / hid-multitouch) | kernel | Works out of the box at OOBE. |
 | Accelerometer / sensors | untested | IIO (`kxcjk-1013` etc.) | kernel | Drives auto-rotate. |
 | eMMC | works (installer) | `sdhci-acpi` | kernel | Installer already reads/writes it. |
 | microSD | untested | `sdhci-acpi` | kernel | |

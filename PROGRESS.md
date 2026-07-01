@@ -134,25 +134,75 @@ are built-in). To fully match, either set `CONFIG_LOCALVERSION` to reproduce
 `-fyde` and match the sublevel, or rebuild/replace the rootfs modules. Note the
 booted kernel version once it comes up and reconcile then.
 
-## Next actions (do these next session)
+---
 
-1. Continue/verify the openFyde **sync** — STARTED 2026-07-01 in background at
-   `$HOME/openfyde/src` (log path in `$HOME/openfyde/logs/latest-sync-log.path`).
-   If incomplete/interrupted, resume with `repo sync` (it's incremental) or
-   `scripts/build-kernel.sh --board iconia-w4-820 sync`.
-2. `scripts/build-kernel.sh --board iconia-w4-820 config` → review `build.env`; confirm board string and
-   that `chromeos-kernel-6_6` ebuild exists.
-3. Enter `cros_sdk` (from `$HOME/openfyde/src`), `setup_board --board=amd64-openfyde_slim`,
-   build the kernel (`scripts/build-kernel.sh --board iconia-w4-820 build` prints the exact emerge cmds),
-   then `scripts/build-kernel.sh --board iconia-w4-820 extract`.
-4. Verify `out/vmlinuz` xloadflags low byte has bit `0x04` set (→ `0x2f`).
-5. `inject-kernel.sh --board iconia-w4-820`; boot-test the tablet; note booted kernel
-   version + whether modules loaded (see caveat above).
-6. On success: install to eMMC, then re-inject kernel to the eMMC ESP.
+## ⭐ RESUME HERE — status as of 2026-07-02 (end of session 1)
+
+**FydeOS BOOTS on the Acer Iconia W4-820 from USB — reached the OOBE/language screen
+with a working touchscreen.** The core project goal (custom kernel boots a 32-bit-UEFI
+Bay Trail tablet) is DONE. NOTE: the full `repo sync` / `cros_sdk` approach above was
+ABANDONED — we build the kernel STANDALONE (see below). Ignore the stale "Build target"
+and repo-sync notes above; the standalone recipe is the source of truth.
+
+### The winning setup (all durable in the repo + release `booting-2026-07-02`)
+- **Kernel**: openFyde R138 kernel git (`~/openfyde/kernel-6.6`, tag 6.6.76), built
+  STANDALONE with plain `make` (no cros_sdk). Exact config saved at
+  `boards/iconia-w4-820/kernel-6.6.76-working.config`. Config = generic x86_64 flavour
+  + these fragments (in `boards/iconia-w4-820/config/` + shared `config/efi-mixed.config`):
+  `efi-mixed` (EFI_MIXED+HANDOVER+STUB), `trim` (drop nouveau/media), `debug-console`
+  (SERIAL_8250_CONSOLE→EFI_EARLYCON, FB_EFI, SYSFB_SIMPLEFB), `tpm` (TCG_VTPM_PROXY),
+  `debug-capture` (VFAT/NLS builtin). xloadflags = **0x3f**. Artifact:
+  `boards/iconia-w4-820/out/vmlinuz`, sha `2c42d429…`.
+- **Bootloader**: self-built i386-efi GRUB core via `scripts/build-grub-ia32.sh`
+  (`bootia32.efi`, prefix `/boot/grub`, ~512K). Reads `/boot/grub/grub.cfg` on the ESP.
+- **Modules**: rebuilt to MATCH the kernel config (`modules-6.6.76-v5.tar`, sha
+  `059c710f…`) and injected into ROOT-A. CRITICAL: modules.builtin must list
+  tpm_vtpm_proxy or `modprobe tpm_vtpm_proxy` in tpm2-simulator pre-start fails.
+- **Rootfs write access**: clear the ext ro-compat tamper byte —
+  `dd if=/dev/zero of=<ROOT-A> bs=1 seek=1127 count=1 conv=notrunc` — then mount `-t ext4` rw.
+- **grub.cfg** (production, i915 flicker fixes): `boards/iconia-w4-820/boot/grub.cfg`.
+
+### Debugging harness that worked
+- Can't interact with tablet (OTG keyboard dead). Capture boot via an init wrapper
+  (`init=/sbin/iconia-dbg`) that dumps `dmesg` — the rootfs-write variant reached 36s;
+  root cause found by reading `/etc/init/tpm2-simulator.conf` statically.
+- USB↔laptop transfer: Crostini home is visible to the crosh host at
+  `/media/fuse/crostini_1910d1979a76c12e132e98ff6ca5833087b4d2ce_termina_penguin/`
+  (writable both ways — used it to pull `kern-a.bin` from the host too).
+- All work: `inspect`/`inject` in crosh `shell`; kernel/module BUILD in Crostini.
+
+### In-flight when we stopped
+- Just swapped grub to production cmdline with **i915.enable_psr=0 enable_fbc=0
+  enable_dc=0** to fix the **flickering** (Bay Trail PSR). Awaiting confirmation it helped.
+- Slowness is partly inherent (2GB + running off slow USB) — eMMC install will help.
+
+## Next actions (session 2)
+
+1. Confirm the i915 flicker fix (grub `boots-2026-07-02` release `grub.cfg` /
+   `boards/iconia-w4-820/boot/grub.cfg`). If flicker persists, try
+   `i915.enable_dpcd_backlight=1` or panel-specific knobs.
+2. **Milestone 8 — install to eMMC** (`/dev/mmcblk0` on the tablet, ~58GB):
+   - Boot FydeOS from USB, run the FydeOS installer to the eMMC.
+   - **BEFORE first eMMC boot** (installer writes the STOCK 0x2b kernel): re-apply our
+     fixes to the eMMC — inject `vmlinuz` (0x3f) + `bootia32.efi` + grub.cfg on the eMMC
+     ESP (partition 12), clear ro-compat + inject matching modules on eMMC ROOT-A
+     (partition 3), and fix `root=PARTUUID=` (changes on eMMC — read with `cgpt`/`blkid`).
+   - Same procedure as USB; just target `mmcblk0` instead of the USB disk.
+3. Hardware follow-ups (see `boards/iconia-w4-820/hardware-status.md`): audio needs
+   firmware (`fw_sst_0f28.bin` failed to load; SST `bytcr_rt5640` + UCM) — use
+   `scripts/inject-rootfs.sh`. Check Wi-Fi/BT, backlight, battery.
+4. Auto-update will overwrite the eMMC kernel with stock 0x2b → disable auto-update
+   on the installed system, or be ready to re-inject.
 
 ## Handy commands
 
 ```sh
-# read the decisive byte on any kernel image:
-od -An -tx1 -j $((0x236)) -N 2 vmlinuz.A     # want low byte with 0x04 set (e.g. 2f)
+# decisive byte on any kernel image (want low byte with 0x04 set, e.g. 2f/3f):
+od -An -tx1 -j $((0x236)) -N 2 vmlinuz.A
+# make a ChromeOS rootfs (ext2 with 0xff ro-compat) writable:
+dd if=/dev/zero of=<ROOTPART> bs=1 seek=1127 count=1 conv=notrunc   # then mount -t ext4 rw
+# rebuild kernel standalone after a config change:
+cd ~/openfyde/kernel-6.6 && make olddefconfig && make -j$(nproc) bzImage
+# ALWAYS after a kernel config change, rebuild+re-inject modules (modules.builtin!):
+make -j$(nproc) modules && make modules_install INSTALL_MOD_PATH=<stage>
 ```

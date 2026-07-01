@@ -43,7 +43,8 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
 | 4 | Scaffold repo + inspect/inject/build scripts | ✅ done |
 | 5 | Sync openFyde, pin board + kernel package + config path | 🟡 kernel ver pinned (6.6.99-fyde); tree not synced |
 | 6 | Build kernel with EFI_MIXED; verify handover bit | ✅ done — **`xloadflags=0x3f`** (6.6.76, trimmed) |
-| 7 | Inject to USB; boot tablet past the freeze | 🟡 kernel built; inject next |
+| 7 | Inject to USB; boot tablet past the freeze | ✅ **DONE** — kernel boots to userspace (init=/bin/sh) |
+| 7b | FydeOS userspace boots (real init) | ⬜ resets; likely modules (6.6.76 vs rootfs 6.6.99) |
 | 8 | Install to eMMC; re-inject kernel to eMMC ESP; standalone boot | ⬜ TODO |
 
 ## Open questions / unknowns to resolve

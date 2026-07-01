@@ -1,0 +1,6 @@
+# build outputs / large artifacts - never commit kernels or the openFyde tree
+out/
+*.efi
+vmlinuz*
+build.env
+usb-profile.env.local

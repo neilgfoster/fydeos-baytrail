@@ -75,16 +75,22 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
   (`openfyde-r138-dev` missing) that aborted the sync before the kernel checkout,
   and the working-tree checkout **filled the 128G disk to 100%**. Killed it and
   `rm -rf`'d `~/openfyde/src` → back to 117G free.
-- **PIVOT: minimal kernel-only build (Option A).** Clone just the ChromeOS kernel
-  git at our branch and build `vmlinuz` standalone with `make` + ChromeOS's own
-  config machinery — no `cros_sdk`, no 94G tree. Clone:
-  `git clone --depth 1 -b release-R138-16295.B-chromeos-6.6`
-  `https://chromium.googlesource.com/chromiumos/third_party/kernel ~/openfyde/kernel-6.6`
-  Then `chromeos/scripts/prepareconfig <flavour>` + append `config/efi-mixed.config`
-  + `make olddefconfig` + `make`. Toolchain: ChromeOS 6.6 likely wants clang/LLVM
-  (install `clang lld`); verify the flavour name under `chromeos/config/x86_64/`.
-  Risk to watch: ChromeOS-specific Kconfig / signing steps when building outside
-  the SDK. Fallback = Option B (repo with minimal groups) if standalone fights us.
+- **PIVOT WORKED: minimal standalone kernel build (Option A).** No `cros_sdk`, no
+  94G tree — just the kernel git (1.8G) built with plain `make`. Steps that worked:
+  1. `git clone --depth 1 --single-branch -b release-R138-16295.B-chromeos-6.6`
+     `https://chromium.googlesource.com/chromiumos/third_party/kernel ~/openfyde/kernel-6.6`
+     → 1.8G, 84k files, includes `chromeos/scripts/prepareconfig`. **Kernel = 6.6.76**
+     (note: USB shipped 6.6.99-fyde — sublevel mismatch; modules won't match, OK for
+     boot test; revisit r144-dev if we need 6.6.99).
+  2. `CHROMEOS_KERNEL_FAMILY=chromeos chromeos/scripts/prepareconfig chromiumos-x86_64-generic`
+     (the flavour the openFyde amd64 board uses; only the `reven`/ChromeOS-Flex
+     flavour ships EFI_MIXED by default — confirms why stock was 0x2b).
+  3. Append `config/efi-mixed.config` (EFI_MIXED + HANDOVER_PROTOCOL + STUB) to `.config`.
+  4. `make olddefconfig` → **all three survived** (verified in expanded 7908-line config).
+  5. Toolchain: **plain gcc works** (no CLANG/CFI/LTO forcing in this config). Installed
+     `build-essential bc bison flex libssl-dev libelf-dev cpio kmod rsync`.
+  6. `make -j8 bzImage` → `arch/x86/boot/bzImage` = the vmlinuz. (IN PROGRESS)
+  Build host: `~/openfyde/kernel-6.6`. Logs: `~/openfyde/logs/`.
 
 ## Build target — PINNED
 

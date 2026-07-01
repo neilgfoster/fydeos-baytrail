@@ -41,7 +41,7 @@ Full reasoning: [`docs/findings.md`](docs/findings.md).
 | 2 | Add `bootia32.efi` + clean grub.cfg; reach GRUB on tablet | ✅ done |
 | 3 | Diagnose kernel freeze → missing `XLF_EFI_HANDOVER_32` (`0x2b`) | ✅ done |
 | 4 | Scaffold repo + inspect/inject/build scripts | ✅ done |
-| 5 | Sync openFyde, pin board + kernel package + config path | ⬜ TODO |
+| 5 | Sync openFyde, pin board + kernel package + config path | 🟡 kernel ver pinned (6.6.99-fyde); tree not synced |
 | 6 | Build kernel with EFI_MIXED; verify `xloadflags`=`0x2f` | ⬜ TODO |
 | 7 | Inject to USB; boot tablet past the freeze | ⬜ TODO |
 | 8 | Install to eMMC; re-inject kernel to eMMC ESP; standalone boot | ⬜ TODO |
@@ -61,20 +61,25 @@ Full reasoning: [`docs/findings.md`](docs/findings.md).
 ## Current state (update me each session)
 
 - **As of:** 2026-07-01
-- Repo scaffolded; scripts written but **not yet run against real hardware/tree**.
+- Repo scaffolded; scripts written. **Inspection RUN against real USB** →
+  results captured in [`usb-profile.env`](usb-profile.env).
+- **Installer kernel = `6.6.99-fyde-09011-gfdc62122de5f-dirty`, built 2025-12-15.**
+  Confirmed `xloadflags=0x2b` (no 32-bit handover) on both A and B slots.
 - `bootia32.efi` + `grub.cfg` were manually placed on the USB earlier and confirmed
   to reach the kernel-handoff freeze. `inject-kernel.sh` reproduces that placement.
 - No openFyde tree synced yet.
 
 ## Next actions (do these next session)
 
-1. In crosh `shell`: run `scripts/inspect-usb.sh` against the USB; commit the
-   resulting `usb-profile.env` here. This pins the **exact kernel version**.
-2. Set `MANIFEST_BRANCH` in `build-kernel.sh` to match that kernel version.
-3. In Crostini: `scripts/build-kernel.sh sync` (long), then `config`, review
-   `build.env`, then `build` inside `cros_sdk`, then `extract`.
-4. Verify `out/vmlinuz` reads `xloadflags` bit `0x04` set.
-5. Inject and boot-test on the tablet.
+1. **Pin `MANIFEST_BRANCH`** in `build-kernel.sh` to the openFyde release carrying
+   kernel **6.6** (built ~Dec 2025). Find it at github.com/openFyde/manifests
+   branches; the ChromiumOS kernel package will be under `sys-kernel/chromeos-kernel-6_6`.
+2. In Crostini: `scripts/build-kernel.sh sync` (long, ~tens of GB), then `config`
+   (auto-discovers board/kernel pkg into `build.env` — verify), then enter
+   `cros_sdk` and `build`, then `extract`.
+3. Verify `out/vmlinuz` reads `xloadflags` low byte with bit `0x04` set (→ `0x2f`).
+4. `inject-kernel.sh --kernel out/vmlinuz` onto the USB; boot-test the tablet.
+5. On success: install to eMMC, then re-inject kernel to the eMMC ESP.
 
 ## Handy commands
 

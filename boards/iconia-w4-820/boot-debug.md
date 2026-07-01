@@ -145,3 +145,26 @@ rebuild. Built-in, so module vermagic unchanged → reflash kernel only, modules
 
 Note: our standalone build may miss OTHER openFyde amd64 board-overlay configs;
 watch for further missing-driver failures after this.
+
+## THE fix for the TPM reboot (2026-07-01)
+
+Read /etc/init/tpm2-simulator.conf from the rootfs. Its pre-start runs:
+```
+modprobe tpm_vtpm_proxy
+mkdir -p /mnt/stateful_partition/unencrypted/tpm2-simulator ; chown ...
+```
+`modprobe tpm_vtpm_proxy` was FAILING (exit 1) -> pre-start status 1 -> TPM not
+available -> reboot. Why: we made VTPM_PROXY built-in in kernel #4/#5, but the
+INJECTED rootfs modules were from build #3 (before that). So the rootfs
+`modules.builtin` didn't list tpm_vtpm_proxy and no .ko existed -> modprobe can't
+find it -> exit 1. The driver IS in the kernel; the module METADATA was stale.
+
+FIX: rebuild modules against kernel #5 (`make modules && make modules_install`) so
+`modules.builtin` lists tpm_vtpm_proxy, then re-inject the module tree onto ROOT-A.
+Then `modprobe tpm_vtpm_proxy` returns 0 (built-in) -> pre-start OK -> TPM works.
+
+LESSON: whenever we change the kernel config, the injected /lib/modules tree
+(esp. modules.builtin/modules.dep) must be rebuilt to match, or modprobe of a
+now-built-in module fails.
+
+Other TPM init jobs present: trunksd, tpm_managerd, attestationd, vtpmd, cr50-result.

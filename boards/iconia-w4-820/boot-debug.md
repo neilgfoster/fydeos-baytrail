@@ -100,3 +100,29 @@ are `6.6.99-fyde` and our kernel is `6.6.76-g...` → `/lib/modules/<our-uname>/
 missing. Plan: `make modules` + `make modules_install` → inject into ROOT-A
 `/lib/modules/6.6.76-g.../` (watch ROOT-A free space). Then retry real init with
 keep_bootcon to see the userspace failure point.
+
+## Userspace reset diagnosed (2026-07-01) — NOT a kernel problem
+
+Kernel boots fully + modules injected. With real init it resets **~40s in**.
+`oops=panic panic=0` did NOT halt it → not a kernel oops. Screenshot of the error
+batch before the reboot:
+- `chmod() of /usr/cache/dlc to (755) failed: No such file or directory`
+- **`TPM not available`**
+- `imageloader-shutdown main process (473) terminated with status 1`
+- **`Failed to get ChromeOS ACPI sysfs path`**
+
+=> This is **FydeOS/ChromeOS userspace failing on non-Chromebook hardware**: the
+W4-820 has no TPM ChromeOS recognises and no ChromeOS ACPI device. The kernel work
+is DONE; remaining issue is OS-image/hardware compatibility (TPM/ACPI), a different
+class of problem.
+
+dmesg-to-ESP capture wrapper (scripts/… init=/sbin/iconia-dbg) FAILED to write
+because VFAT_FS=m (not loaded early). To retry capture: modprobe vfat first, or
+write to an ext4 target (ext4 is built-in).
+
+### Directions to evaluate
+1. BIOS: check for a TPM / Intel PTT (fTPM) / Security Device toggle to enable.
+2. Whether openFyde amd64 can run without a TPM (tpm_dynamic / simulator) — may
+   need image-level changes (the full build we deferred).
+3. Find the exact reboot trigger (last log line) — likely a TPM/cryptohome or a
+   critical upstart job.

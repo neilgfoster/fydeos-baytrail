@@ -43,6 +43,16 @@ See [`docs/findings.md`](docs/findings.md) for the full diagnostic trail.
    (re)installs `bootia32.efi` + a `gptpriority`-free `grub.cfg` so 32-bit
    firmware can boot the whole chain.
 
+### Hardware bring-up (after it boots)
+
+The same rebuild pipeline addresses most Bay Trail hardware quirks (Wi-Fi, audio,
+touch, backlight, sensors). Track them in
+[`docs/hardware-status.md`](docs/hardware-status.md). Fixes land in one of three
+places: a **kernel** config fragment (`config/`) or patch (`patches/`) → rebuild;
+a **cmdline** tweak in the injected `grub.cfg` → no rebuild; or **rootfs** blobs
+(firmware / ALSA UCM) via **`scripts/inject-rootfs.sh`**. Firmware/ACPI/suspend
+bugs baked into the 32-bit UEFI are not kernel-fixable.
+
 ## Quick check that a rebuild worked
 
 The single byte that matters is `xloadflags` at offset `0x236` of the kernel

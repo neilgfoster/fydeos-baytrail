@@ -19,9 +19,9 @@ set -euo pipefail
 
 ROOT=${OPENFYDE_ROOT:-$HOME/openfyde}
 REPO=${ROOT}/src
-MANIFEST_URL=${MANIFEST_URL:-https://github.com/openFyde/manifests.git}
-MANIFEST_BRANCH=${MANIFEST_BRANCH:-master}   # pin to a release branch once known
-BOARD=${BOARD:-amd64-generic}                # "amd64-fydeos_slim" base; confirm below
+MANIFEST_URL=${MANIFEST_URL:-https://github.com/openFyde/manifest.git}
+MANIFEST_BRANCH=${MANIFEST_BRANCH:-r138-dev}   # matches USB kernel 6.6 built Dec 2025
+BOARD=${BOARD:-amd64-openfyde_slim}            # matches USB board "amd64-fydeos_slim"; verify
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FRAG=${HERE}/config/efi-mixed.config
 ENVF=${HERE}/build.env
@@ -49,9 +49,9 @@ cmd_config(){
   cd "$REPO"
   log "discovering kernel package + config path"
   # ChromiumOS kernel ebuilds live under src/third_party/chromiumos-overlay/sys-kernel/
-  KPKG=$(ls -d src/third_party/chromiumos-overlay/sys-kernel/chromeos-kernel-* 2>/dev/null | xargs -n1 basename | head -n1 || true)
+  KPKG=${KPKG_OVERRIDE:-chromeos-kernel-6_6}   # USB ships 6.6; confirm the ebuild exists
   # kernel config fragments live under the kernel source tree chromeos/config/
-  KSRC=$(ls -d src/third_party/kernel/v* 2>/dev/null | head -n1 || true)
+  KSRC=src/third_party/kernel/v6.6
   {
     echo "BOARD=$BOARD"
     echo "KPKG=${KPKG:-UNKNOWN-set-manually}"

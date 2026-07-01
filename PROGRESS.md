@@ -69,17 +69,41 @@ Full reasoning: [`docs/findings.md`](docs/findings.md).
   to reach the kernel-handoff freeze. `inject-kernel.sh` reproduces that placement.
 - No openFyde tree synced yet.
 
+## Build target — PINNED
+
+- Manifest repo: `https://github.com/openFyde/manifest.git` (singular "manifest").
+- **Branch: `r138-dev`** — carries `src/third_party/kernel/v6.6` (ref
+  `release-R138-16295.B-chromeos-6.6`), matching the USB's 6.6.99-fyde kernel
+  built Dec 2025. (r144-dev also has v6.6 but shipped Mar 2026 — further from our
+  build; fall back to it if r138 modules mismatch.)
+- **Board: `amd64-openfyde_slim`** (matches USB label `amd64-fydeos_slim`) — verify
+  the exact board string after sync.
+- Kernel package: `chromeos-kernel-6_6`. Config fragment appended to
+  `src/third_party/kernel/v6.6/chromeos/config/x86_64/common.config`.
+
+### ⚠️ Module-version caveat (handle at inject/boot stage)
+
+The rootfs on the USB carries modules for `6.6.99-fyde`. Our rebuilt openFyde
+kernel may report a slightly different `UTS_RELEASE` (e.g. `6.6.x-openfyde` or no
+`-fyde`), so `/lib/modules/<ver>/` won't match → modules won't load. For the FIRST
+boot test that's OK (goal is just to get *past the EFI freeze*; essential drivers
+are built-in). To fully match, either set `CONFIG_LOCALVERSION` to reproduce
+`-fyde` and match the sublevel, or rebuild/replace the rootfs modules. Note the
+booted kernel version once it comes up and reconcile then.
+
 ## Next actions (do these next session)
 
-1. **Pin `MANIFEST_BRANCH`** in `build-kernel.sh` to the openFyde release carrying
-   kernel **6.6** (built ~Dec 2025). Find it at github.com/openFyde/manifests
-   branches; the ChromiumOS kernel package will be under `sys-kernel/chromeos-kernel-6_6`.
-2. In Crostini: `scripts/build-kernel.sh sync` (long, ~tens of GB), then `config`
-   (auto-discovers board/kernel pkg into `build.env` — verify), then enter
-   `cros_sdk` and `build`, then `extract`.
-3. Verify `out/vmlinuz` reads `xloadflags` low byte with bit `0x04` set (→ `0x2f`).
-4. `inject-kernel.sh --kernel out/vmlinuz` onto the USB; boot-test the tablet.
-5. On success: install to eMMC, then re-inject kernel to the eMMC ESP.
+1. Continue/verify the openFyde **sync** (started 2026-07-01, background) at
+   `$HOME/openfyde/src`. Resume with `scripts/build-kernel.sh sync` if incomplete.
+2. `scripts/build-kernel.sh config` → review `build.env`; confirm board string and
+   that `chromeos-kernel-6_6` ebuild exists.
+3. Enter `cros_sdk` (from `$HOME/openfyde/src`), `setup_board --board=amd64-openfyde_slim`,
+   build the kernel (`scripts/build-kernel.sh build` prints the exact emerge cmds),
+   then `scripts/build-kernel.sh extract`.
+4. Verify `out/vmlinuz` xloadflags low byte has bit `0x04` set (→ `0x2f`).
+5. `inject-kernel.sh --kernel out/vmlinuz`; boot-test the tablet; note booted kernel
+   version + whether modules loaded (see caveat above).
+6. On success: install to eMMC, then re-inject kernel to the eMMC ESP.
 
 ## Handy commands
 

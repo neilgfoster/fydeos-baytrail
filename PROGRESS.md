@@ -42,8 +42,8 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
 | 3 | Diagnose kernel freeze → missing `XLF_EFI_HANDOVER_32` (`0x2b`) | ✅ done |
 | 4 | Scaffold repo + inspect/inject/build scripts | ✅ done |
 | 5 | Sync openFyde, pin board + kernel package + config path | 🟡 kernel ver pinned (6.6.99-fyde); tree not synced |
-| 6 | Build kernel with EFI_MIXED; verify `xloadflags`=`0x2f` | ⬜ TODO |
-| 7 | Inject to USB; boot tablet past the freeze | ⬜ TODO |
+| 6 | Build kernel with EFI_MIXED; verify handover bit | ✅ done — **`xloadflags=0x3f`** (6.6.76, trimmed) |
+| 7 | Inject to USB; boot tablet past the freeze | 🟡 kernel built; inject next |
 | 8 | Install to eMMC; re-inject kernel to eMMC ESP; standalone boot | ⬜ TODO |
 
 ## Open questions / unknowns to resolve
@@ -89,8 +89,15 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
   4. `make olddefconfig` → **all three survived** (verified in expanded 7908-line config).
   5. Toolchain: **plain gcc works** (no CLANG/CFI/LTO forcing in this config). Installed
      `build-essential bc bison flex libssl-dev libelf-dev cpio kmod rsync`.
-  6. `make -j8 bzImage` → `arch/x86/boot/bzImage` = the vmlinuz. (IN PROGRESS)
-  Build host: `~/openfyde/kernel-6.6`. Logs: `~/openfyde/logs/`.
+  6. Applied `boards/iconia-w4-820/config/trim.config` (drop nouveau/media/virtio-gpu/
+     infiniband) to cut build time; essentials + EFI_MIXED verified intact.
+  7. `make -j8 bzImage` (gcc) → **SUCCESS**. `arch/x86/boot/bzImage` = 10.3MB,
+     **`xloadflags=0x3f` (HANDOVER32 SET)** vs stock `0x2b`. Version
+     `6.6.76-gabcfb16364e1 #2`. Copied to `boards/iconia-w4-820/out/vmlinuz` and
+     published as GitHub release asset `kernel-6.6.76-efimixed`.
+  Build host: `~/openfyde/kernel-6.6`. Logs: `~/openfyde/logs/`. Build ~15 min trimmed.
+  NOTE: version `6.6.76` (no `-fyde`) ≠ rootfs modules `6.6.99-fyde` → modules won't
+  load; fine for boot test (essentials built-in). Revisit for full HW support.
 
 ## Build target — PINNED
 

@@ -50,3 +50,28 @@ the tablet and the FydeOS laptop). Slow loop — prefer batching hypotheses.
   against known-good Bay Trail Linux boots (Ubuntu bootia32 + amd64 kernel).
 - Try a mainline/Debian `bootia32.efi` + a stock distro kernel as a control to
   confirm the hardware boots ANY 64-bit kernel via mixed mode.
+
+## CONTROL TEST RESULT (decisive)
+
+Booted a known-good **Debian 6.1.0-47-amd64** kernel (xloadflags 0x7f) via our
+self-built GRUB on the W4-820: **lots of kernel text + a kernel panic**. So:
+
+- ✅ Hardware CAN boot a 64-bit kernel via EFI mixed mode
+- ✅ Our self-built GRUB handover works
+- ❌ The failure is SPECIFIC TO OUR openFyde kernel BUILD (not HW/bootloader)
+
+## Root-cause hypothesis: our kernel booted SILENTLY
+
+Our kernel config lacked EFI console options that Debian has:
+- `CONFIG_EARLY_PRINTK_EFI` absent (removed in 6.6) → `earlyprintk=efi` was a no-op
+- `CONFIG_EFI_EARLYCON` off (needs SERIAL_EARLYCON) → no `earlycon=efifb`
+- `CONFIG_FB_EFI` / `CONFIG_SYSFB_SIMPLEFB` off → NO EFI framebuffer; console only
+  appears once i915 KMS is up. If i915 hangs (classic Bay Trail) → dead screen.
+
+=> Our kernel may have been booting all along, invisibly, then hanging (likely
+i915) with no console to show it.
+
+## Fix: config/debug-console.config (rebuild)
+
+Enable `SERIAL_8250_CONSOLE` (→ SERIAL_EARLYCON → EFI_EARLYCON), `FB_EFI`,
+`SYSFB_SIMPLEFB`. Then boot with `earlycon=efifb console=tty1` to SEE the boot.

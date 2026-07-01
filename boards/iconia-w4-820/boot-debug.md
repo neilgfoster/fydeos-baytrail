@@ -75,3 +75,28 @@ i915) with no console to show it.
 
 Enable `SERIAL_8250_CONSOLE` (→ SERIAL_EARLYCON → EFI_EARLYCON), `FB_EFI`,
 `SYSFB_SIMPLEFB`. Then boot with `earlycon=efifb console=tty1` to SEE the boot.
+
+## ✅ RESOLVED: kernel boots to userspace (2026-07-01)
+
+With console options (build #3) + `earlycon=efifb console=tty1 keep_bootcon panic=0`:
+- The kernel boots fully, past the i915 handoff (`bootconsole [efifb0] disabled`).
+- With `init=/bin/sh` it reaches userspace and runs the shell, then:
+  `Kernel panic - not syncing: Attempted to kill init! exitcode=0x00000200`
+  (= /bin/sh exited; normal when init exits). Firmware confirmed:
+  `Acer Iconia W4-820P/Cheetah3, BIOS v1.14 01/27/2014`.
+
+**Conclusion: our openFyde 6.6.76 kernel (EFI_MIXED + console) boots end-to-end on
+the W4-820. The 32-bit-UEFI boot problem is SOLVED.**
+
+Root cause of the long "silent freeze": ChromeOS kernel had no EFI framebuffer/
+earlycon, so a working boot was invisible; the earlier real-init "sudden reboot"
+is FydeOS *userspace* (init=/sbin/init) resetting — next phase.
+
+## Next phase: FydeOS userspace
+
+Real `init=/sbin/init` resets (userspace reboot; panic=0 can't stop a userspace
+reboot). Most-built-in drivers are =y so basic boot works, but the rootfs modules
+are `6.6.99-fyde` and our kernel is `6.6.76-g...` → `/lib/modules/<our-uname>/`
+missing. Plan: `make modules` + `make modules_install` → inject into ROOT-A
+`/lib/modules/6.6.76-g.../` (watch ROOT-A free space). Then retry real init with
+keep_bootcon to see the userspace failure point.

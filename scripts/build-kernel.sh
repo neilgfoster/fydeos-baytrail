@@ -19,9 +19,14 @@ set -euo pipefail
 
 ROOT=${OPENFYDE_ROOT:-$HOME/openfyde}
 REPO=${ROOT}/src
-MANIFEST_URL=${MANIFEST_URL:-https://github.com/openFyde/manifest.git}
-MANIFEST_BRANCH=${MANIFEST_BRANCH:-r138-dev}   # matches USB kernel 6.6 built Dec 2025
-BOARD=${BOARD:-amd64-openfyde_slim}            # matches USB board "amd64-fydeos_slim"; verify
+# openFyde layers on top of the UPSTREAM ChromiumOS manifest via local_manifests
+# (per openFyde/getting-started). Base = the ChromiumOS release; openFyde overrides.
+CROS_MANIFEST_URL=${CROS_MANIFEST_URL:-https://chromium.googlesource.com/chromiumos/manifest.git}
+CROS_REPO_URL=${CROS_REPO_URL:-https://chromium.googlesource.com/external/repo.git}
+CROS_RELEASE=${CROS_RELEASE:-release-R138-16295.B}   # matches USB kernel 6.6 (Dec 2025)
+OPENFYDE_MANIFEST_URL=${OPENFYDE_MANIFEST_URL:-https://github.com/openFyde/manifest.git}
+MANIFEST_BRANCH=${MANIFEST_BRANCH:-r138-dev}
+BOARD=${BOARD:-amd64-openfyde_slim}            # matches USB board "amd64-fydeos_slim"
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FRAG=${HERE}/config/efi-mixed.config
 ENVF=${HERE}/build.env
@@ -40,7 +45,14 @@ need_depot_tools(){
 cmd_sync(){
   need_depot_tools
   mkdir -p "$REPO"; cd "$REPO"
-  repo init -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
+  # 1. base = upstream ChromiumOS release
+  repo init -u "$CROS_MANIFEST_URL" --repo-url "$CROS_REPO_URL" -b "$CROS_RELEASE"
+  # 2. overlay the openFyde manifest via local_manifests
+  if [ ! -d openfyde/manifest ]; then
+    git clone "$OPENFYDE_MANIFEST_URL" openfyde/manifest -b "$MANIFEST_BRANCH"
+  fi
+  ln -snfr openfyde/manifest .repo/local_manifests
+  # 3. sync (long; resumable)
   repo sync -j"$(nproc)"
 }
 

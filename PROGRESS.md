@@ -71,15 +71,27 @@ Full reasoning: [`docs/findings.md`](docs/findings.md).
 
 ## Build target — PINNED
 
-- Manifest repo: `https://github.com/openFyde/manifest.git` (singular "manifest").
-- **Branch: `r138-dev`** — carries `src/third_party/kernel/v6.6` (ref
-  `release-R138-16295.B-chromeos-6.6`), matching the USB's 6.6.99-fyde kernel
-  built Dec 2025. (r144-dev also has v6.6 but shipped Mar 2026 — further from our
-  build; fall back to it if r138 modules mismatch.)
-- **Board: `amd64-openfyde_slim`** (matches USB label `amd64-fydeos_slim`) — verify
-  the exact board string after sync.
+openFyde layers on the **upstream ChromiumOS manifest** via `local_manifests`
+(NOT a direct init of the openFyde manifest — that only has 21 overlay projects):
+
+```
+repo init -u https://chromium.googlesource.com/chromiumos/manifest.git \
+  --repo-url https://chromium.googlesource.com/external/repo.git \
+  -b release-R138-16295.B
+git clone https://github.com/openFyde/manifest.git openfyde/manifest -b r138-dev
+ln -snfr openfyde/manifest .repo/local_manifests
+repo sync -j"$(nproc)"
+```
+
+- **ChromiumOS release: `release-R138-16295.B`** (upstream base).
+- **openFyde manifest branch: `r138-dev`** — overlays via local_manifests. Verified:
+  296 projects total, incl. `src/third_party/kernel/v6.6` @ `8df27f5…` (R138 chromeos-6.6),
+  matching the USB's 6.6.99-fyde kernel (Dec 2025). Fallback: r144-dev / R144-16503.B.
+- **Board: `amd64-openfyde_slim`** — CONFIRMED (overlay repo `overlay-amd64-openfyde_slim`
+  exists; matches USB label `amd64-fydeos_slim`).
 - Kernel package: `chromeos-kernel-6_6`. Config fragment appended to
   `src/third_party/kernel/v6.6/chromeos/config/x86_64/common.config`.
+- Tree location: `$HOME/openfyde/src`. Sync logs: `$HOME/openfyde/logs/`.
 
 ### ⚠️ Module-version caveat (handle at inject/boot stage)
 
@@ -93,8 +105,10 @@ booted kernel version once it comes up and reconcile then.
 
 ## Next actions (do these next session)
 
-1. Continue/verify the openFyde **sync** (started 2026-07-01, background) at
-   `$HOME/openfyde/src`. Resume with `scripts/build-kernel.sh sync` if incomplete.
+1. Continue/verify the openFyde **sync** — STARTED 2026-07-01 in background at
+   `$HOME/openfyde/src` (log path in `$HOME/openfyde/logs/latest-sync-log.path`).
+   If incomplete/interrupted, resume with `repo sync` (it's incremental) or
+   `scripts/build-kernel.sh sync`.
 2. `scripts/build-kernel.sh config` → review `build.env`; confirm board string and
    that `chromeos-kernel-6_6` ebuild exists.
 3. Enter `cros_sdk` (from `$HOME/openfyde/src`), `setup_board --board=amd64-openfyde_slim`,

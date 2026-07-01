@@ -70,10 +70,21 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
 - **Repo restructured multi-board**: shared machinery (`scripts/`, `config/efi-mixed.config`,
   `docs/`) + per-device `boards/<id>/` (W4-820 = `boards/iconia-w4-820/`). All scripts
   take `--board <id>`. New devices: `docs/adding-a-board.md`, `boards/_template/`.
-- openFyde sync: full tree fetched (~94G) EXCEPT the Chromium browser source
-  (`chromium.xml`), which has a bad/missing ref `openfyde-r138-dev` on the mirror
-  AND is ~40G we don't need. Disabled `chromium.xml` (blanked in the manifest clone;
-  now baked into `build-kernel.sh` sync). Re-running sync to check out the kernel tree.
+- **ABANDONED the full `repo sync` approach.** It pulled ~94G of the ChromiumOS
+  tree (to build ONE kernel), the Chromium browser project had a bad ref
+  (`openfyde-r138-dev` missing) that aborted the sync before the kernel checkout,
+  and the working-tree checkout **filled the 128G disk to 100%**. Killed it and
+  `rm -rf`'d `~/openfyde/src` → back to 117G free.
+- **PIVOT: minimal kernel-only build (Option A).** Clone just the ChromeOS kernel
+  git at our branch and build `vmlinuz` standalone with `make` + ChromeOS's own
+  config machinery — no `cros_sdk`, no 94G tree. Clone:
+  `git clone --depth 1 -b release-R138-16295.B-chromeos-6.6`
+  `https://chromium.googlesource.com/chromiumos/third_party/kernel ~/openfyde/kernel-6.6`
+  Then `chromeos/scripts/prepareconfig <flavour>` + append `config/efi-mixed.config`
+  + `make olddefconfig` + `make`. Toolchain: ChromeOS 6.6 likely wants clang/LLVM
+  (install `clang lld`); verify the flavour name under `chromeos/config/x86_64/`.
+  Risk to watch: ChromeOS-specific Kconfig / signing steps when building outside
+  the SDK. Fallback = Option B (repo with minimal groups) if standalone fights us.
 
 ## Build target — PINNED
 

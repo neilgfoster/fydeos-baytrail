@@ -126,3 +126,22 @@ write to an ext4 target (ext4 is built-in).
    need image-level changes (the full build we deferred).
 3. Find the exact reboot trigger (last log line) — likely a TPM/cryptohome or a
    critical upstart job.
+
+## ROOT CAUSE of the ~40s reset FOUND (2026-07-01)
+
+Full dmesg captured to ROOT-A via init wrapper v3 (log to rootfs; VFAT=m broke the
+ESP route). Failure chain at ~36s:
+```
+init: tpm2-simulator pre-start process (520) terminated with status 1
+chromeos_startup: TPM not available
+ERROR chromeos_startup: tpm_setup.cc:176] TPM not available.
+init: imageloader-shutdown main process (530) terminated with status 1
+```
+openFyde ships a SOFTWARE TPM (tpm2-simulator); it failed to start because our
+kernel lacked **`CONFIG_TCG_VTPM_PROXY`** (the /dev/vtpmx driver the simulator uses
+to present /dev/tpm0). We built the generic x86_64 flavour standalone and missed
+this board-overlay config. Fix: `config/tpm.config` (CONFIG_TCG_VTPM_PROXY=y),
+rebuild. Built-in, so module vermagic unchanged → reflash kernel only, modules stay.
+
+Note: our standalone build may miss OTHER openFyde amd64 board-overlay configs;
+watch for further missing-driver failures after this.

@@ -55,6 +55,12 @@ cmd_sync(){
   mkdir -p "$REPO"; cd "$REPO"
   repo init -u "$CROS_MANIFEST_URL" --repo-url "$CROS_REPO_URL" -b "$CROS_RELEASE"
   [ -d openfyde/manifest ] || git clone "$OPENFYDE_MANIFEST_URL" openfyde/manifest -b "$OPENFYDE_MANIFEST_BRANCH"
+  # Drop the Chromium *browser* source (chromium.xml): its ref
+  # (openfyde-<branch>) is missing/flaky on the mirror AND it is ~40GB we don't
+  # need for a kernel build. Excluding it unblocks the sync and saves disk.
+  if [ -s openfyde/manifest/chromium.xml ] && ! grep -q 'iconia-disabled' openfyde/manifest/chromium.xml; then
+    printf '<?xml version="1.0"?>\n<!-- iconia-disabled: browser not needed for kernel build -->\n<manifest>\n</manifest>\n' > openfyde/manifest/chromium.xml
+  fi
   ln -snfr openfyde/manifest .repo/local_manifests
   repo sync -j"$(nproc)" --no-tags --optimized-fetch
 }

@@ -31,7 +31,7 @@ A repeatable process to boot & install FydeOS/openFyde on an **Acer Iconia W4-82
 - Stock FydeOS kernel = **`0x2b`** → bit CLEAR → **won't boot** on 32-bit UEFI.
 - Need a rebuild reading **`0x2f`** (bit set). This one byte is the go/no-go test.
 
-Full reasoning: [`docs/findings.md`](docs/findings.md).
+Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findings.md).
 
 ## Milestones
 
@@ -62,12 +62,15 @@ Full reasoning: [`docs/findings.md`](docs/findings.md).
 
 - **As of:** 2026-07-01
 - Repo scaffolded; scripts written. **Inspection RUN against real USB** →
-  results captured in [`usb-profile.env`](usb-profile.env).
+  results captured in [`boards/iconia-w4-820/usb-profile.env`](boards/iconia-w4-820/usb-profile.env).
 - **Installer kernel = `6.6.99-fyde-09011-gfdc62122de5f-dirty`, built 2025-12-15.**
   Confirmed `xloadflags=0x2b` (no 32-bit handover) on both A and B slots.
 - `bootia32.efi` + `grub.cfg` were manually placed on the USB earlier and confirmed
   to reach the kernel-handoff freeze. `inject-kernel.sh` reproduces that placement.
-- No openFyde tree synced yet.
+- **Repo restructured multi-board**: shared machinery (`scripts/`, `config/efi-mixed.config`,
+  `docs/`) + per-device `boards/<id>/` (W4-820 = `boards/iconia-w4-820/`). All scripts
+  take `--board <id>`. New devices: `docs/adding-a-board.md`, `boards/_template/`.
+- openFyde tree syncing (background) at `$HOME/openfyde/src`; not yet complete.
 
 ## Build target — PINNED
 
@@ -108,14 +111,14 @@ booted kernel version once it comes up and reconcile then.
 1. Continue/verify the openFyde **sync** — STARTED 2026-07-01 in background at
    `$HOME/openfyde/src` (log path in `$HOME/openfyde/logs/latest-sync-log.path`).
    If incomplete/interrupted, resume with `repo sync` (it's incremental) or
-   `scripts/build-kernel.sh sync`.
-2. `scripts/build-kernel.sh config` → review `build.env`; confirm board string and
+   `scripts/build-kernel.sh --board iconia-w4-820 sync`.
+2. `scripts/build-kernel.sh --board iconia-w4-820 config` → review `build.env`; confirm board string and
    that `chromeos-kernel-6_6` ebuild exists.
 3. Enter `cros_sdk` (from `$HOME/openfyde/src`), `setup_board --board=amd64-openfyde_slim`,
-   build the kernel (`scripts/build-kernel.sh build` prints the exact emerge cmds),
-   then `scripts/build-kernel.sh extract`.
+   build the kernel (`scripts/build-kernel.sh --board iconia-w4-820 build` prints the exact emerge cmds),
+   then `scripts/build-kernel.sh --board iconia-w4-820 extract`.
 4. Verify `out/vmlinuz` xloadflags low byte has bit `0x04` set (→ `0x2f`).
-5. `inject-kernel.sh --kernel out/vmlinuz`; boot-test the tablet; note booted kernel
+5. `inject-kernel.sh --board iconia-w4-820`; boot-test the tablet; note booted kernel
    version + whether modules loaded (see caveat above).
 6. On success: install to eMMC, then re-inject kernel to the eMMC ESP.
 

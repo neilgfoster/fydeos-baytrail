@@ -7,24 +7,32 @@
 # firmware can boot the chain.
 #
 # Usage:
-#   sudo sh inject-kernel.sh --kernel /path/to/vmlinuz [--dev /dev/sdX] [--slot A|B]
+#   sudo sh inject-kernel.sh --board <id> [--kernel vmlinuz] [--dev /dev/sdX] [--slot A|B]
 #
-# Requires: the ESP is auto-detected the same way as inspect-usb.sh (partition 12).
+# With --board, defaults --kernel to boards/<id>/out/vmlinuz and reads BOOTIA32_URL
+# from boards/<id>/board.env. ESP is auto-detected like inspect-usb.sh (partition 12).
 set -eu
 
+HERE=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 MNT=${MNT:-/tmp/iconia-esp}
-BOOTIA32_URL=${BOOTIA32_URL:-https://github.com/hirotakaster/baytail-bootia32.efi/raw/master/bootia32.efi}
-KERNEL="" ; DEV="" ; SLOT="A"
+BOARD_ID="" ; KERNEL="" ; DEV="" ; SLOT="A"
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --board)  BOARD_ID=$2; shift 2 ;;
     --kernel) KERNEL=$2; shift 2 ;;
     --dev)    DEV=$2;    shift 2 ;;
     --slot)   SLOT=$2;   shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$KERNEL" ] && [ -f "$KERNEL" ] || { echo "ERROR: --kernel <file> required" >&2; exit 2; }
+if [ -n "$BOARD_ID" ]; then
+  BD="$HERE/boards/$BOARD_ID"
+  [ -f "$BD/board.env" ] && . "$BD/board.env"
+  [ -n "$KERNEL" ] || KERNEL="$BD/out/vmlinuz"
+fi
+BOOTIA32_URL=${BOOTIA32_URL:-https://github.com/hirotakaster/baytail-bootia32.efi/raw/master/bootia32.efi}
+[ -n "$KERNEL" ] && [ -f "$KERNEL" ] || { echo "ERROR: kernel not found ($KERNEL); pass --kernel <file> or build first" >&2; exit 2; }
 
 find_p12() {
   if [ -n "$DEV" ]; then case "$DEV" in *[0-9]) echo "${DEV}p12";; *) echo "${DEV}12";; esac; return; fi

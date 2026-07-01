@@ -13,26 +13,30 @@
 # Layout: ChromeOS GPT -> ROOT-A is partition 3 (KERN-A=2, ROOT-A=3, ESP=12).
 #
 # Usage:
-#   sudo sh inject-rootfs.sh --stage /path/to/overlay [--dev /dev/sdX] [--slot A|B]
+#   sudo sh inject-rootfs.sh --board <id> [--stage dir] [--dev /dev/sdX] [--slot A|B]
 #
-# The --stage dir is a filesystem tree rooted at the rootfs root, e.g.:
+# With --board, defaults --stage to boards/<id>/stage/. The stage dir is a
+# filesystem tree rooted at the rootfs root, e.g.:
 #   stage/lib/firmware/brcm/brcmfmac43241b4-sdio.bin
 #   stage/lib/firmware/brcm/brcmfmac43241b4-sdio.acer-w4-820.txt
 #   stage/usr/share/alsa/ucm2/...
 set -eu
 
+HERE=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 MNT=${MNT:-/tmp/iconia-root}
-STAGE="" ; DEV="" ; SLOT="A"
+BOARD_ID="" ; STAGE="" ; DEV="" ; SLOT="A"
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --board) BOARD_ID=$2; shift 2 ;;
     --stage) STAGE=$2; shift 2 ;;
     --dev)   DEV=$2;   shift 2 ;;
     --slot)  SLOT=$2;  shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$STAGE" ] && [ -d "$STAGE" ] || { echo "ERROR: --stage <dir> required" >&2; exit 2; }
+[ -n "$STAGE" ] || { [ -n "$BOARD_ID" ] && STAGE="$HERE/boards/$BOARD_ID/stage"; }
+[ -n "$STAGE" ] && [ -d "$STAGE" ] || { echo "ERROR: --stage <dir> (or --board) required" >&2; exit 2; }
 
 # ROOT-A = partition 3, ROOT-B = partition 5
 case "$SLOT" in A) PN=3 ;; B) PN=5 ;; *) echo "slot must be A or B" >&2; exit 2 ;; esac

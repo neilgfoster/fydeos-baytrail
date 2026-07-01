@@ -7,14 +7,27 @@
 # PARTUUIDs. Writes a machine-readable profile to ./usb-profile.env.
 #
 # Usage:
-#   sudo sh inspect-usb.sh [/dev/sdX]      # device optional; auto-detected
+#   sudo sh inspect-usb.sh [--board <id>] [/dev/sdX]   # device optional; auto-detected
 #
+# With --board, writes boards/<id>/usb-profile.env; otherwise ./usb-profile.env.
 # POSIX sh only (busybox-safe): uses od, dd, tr, grep, sed.
 set -eu
 
+HERE=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 MNT=${MNT:-/tmp/iconia-esp}
-OUT=${OUT:-./usb-profile.env}
-DEV=${1:-}
+BOARD_ID="" ; DEV=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --board) BOARD_ID=$2; shift 2 ;;
+    *) DEV=$1; shift ;;
+  esac
+done
+if [ -n "$BOARD_ID" ]; then
+  mkdir -p "$HERE/boards/$BOARD_ID"
+  OUT="$HERE/boards/$BOARD_ID/usb-profile.env"
+else
+  OUT=${OUT:-./usb-profile.env}
+fi
 
 log() { printf '%s\n' "$*" >&2; }
 

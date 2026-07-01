@@ -168,3 +168,17 @@ LESSON: whenever we change the kernel config, the injected /lib/modules tree
 now-built-in module fails.
 
 Other TPM init jobs present: trunksd, tpm_managerd, attestationd, vtpmd, cr50-result.
+
+## ✅✅ FYDEOS BOOTS ON THE W4-820 (2026-07-02)
+
+After rebuilding modules against kernel #5 (so modules.builtin lists tpm_vtpm_proxy)
+and re-injecting: the tablet boots FydeOS to the OOBE/language screen with a WORKING
+TOUCHSCREEN. Custom EFI_MIXED kernel + injected modules + i915 + panel + touch +
+full ChromeOS userspace (TPM via tpm2-simulator) all working from USB.
+
+Winning stack: kernel #5 (6.6.76, EFI_MIXED + VTPM_PROXY + EFI console + VFAT) via
+self-built bootia32 GRUB, modules rebuilt to match + injected into ROOT-A (with the
+ro-compat tamper byte cleared), on a stock FydeOS installer USB.
+
+Remaining: finish OOBE, then install to eMMC and re-apply kernel + matching modules
+to the eMMC ESP/rootfs (PARTUUIDs change; rootfs ro-compat byte must be cleared).

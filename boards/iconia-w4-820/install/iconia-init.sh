@@ -114,6 +114,12 @@ mkdir -p "$EESP_MNT/syslinux" "$EESP_MNT/efi/boot" "$EESP_MNT/boot/grub"
 cp -f "$UESP_MNT/syslinux/vmlinuz.A"    "$EESP_MNT/syslinux/vmlinuz.A"
 cp -f "$UESP_MNT/efi/boot/bootia32.efi" "$EESP_MNT/efi/boot/bootia32.efi"
 cp -f "$UESP_MNT/efi/boot/bootx64.efi"  "$EESP_MNT/efi/boot/bootx64.efi" 2>/dev/null || true
+# also drop GRUB at the Windows Boot Manager path: the fixed eMMC boots only via
+# the firmware's persistent NVRAM entry (-> \EFI\Microsoft\Boot\bootmgfw.efi),
+# NOT the removable-media fallback that boots the USB. No efivarfs to add an
+# NVRAM entry, so we occupy the path the existing entry already points to.
+mkdir -p "$EESP_MNT/efi/microsoft/boot"
+cp -f "$UESP_MNT/efi/boot/bootia32.efi" "$EESP_MNT/efi/microsoft/boot/bootmgfw.efi"
 
 cat > "$EESP_MNT/boot/grub/grub.cfg" <<EOF
 set timeout=2

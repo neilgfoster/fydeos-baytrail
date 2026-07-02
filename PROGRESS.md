@@ -45,7 +45,7 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
 | 6 | Build kernel with EFI_MIXED; verify handover bit | ✅ done — **`xloadflags=0x3f`** (6.6.76, trimmed) |
 | 7 | Inject to USB; boot tablet past the freeze | ✅ **DONE** — kernel boots to userspace (init=/bin/sh) |
 | 7b | FydeOS userspace boots (real init) | ✅ **DONE** — boots to OOBE, touchscreen works! |
-| 8 | Install to eMMC; re-inject kernel+modules to eMMC; standalone boot | ⬜ TODO (next) |
+| 8 | Install to eMMC; re-inject kernel+modules to eMMC; standalone boot | 🟡 eMMC INSTALLED + boots our GRUB; eMMC enumeration intermittent (see session 2) |
 
 ## Open questions / unknowns to resolve
 
@@ -179,7 +179,79 @@ and repo-sync notes above; the standalone recipe is the source of truth.
   Bay Trail PSR was the cause. This grub.cfg is the production baseline going forward.
 - Slowness is partly inherent (2GB + running off slow USB) — eMMC install will help.
 
-## Next actions (session 2)
+## ⭐ SESSION 2 — status as of 2026-07-02
+
+**Flicker FIXED and eMMC INSTALL DONE.** FydeOS is installed to the tablet's
+eMMC and the firmware boots OUR GRUB from it. Remaining wart: the kernel's eMMC
+enumeration is intermittent, so eMMC boot succeeds only ~1-in-3 tries.
+
+### What worked
+- **i915 flicker fix CONFIRMED**: production grub.cfg (`enable_psr=0 enable_fbc=0
+  enable_dc=0`) → no flicker, smooth. This is the boot baseline.
+- **eMMC install via PID-1 (init=) — the winning method.** The upstart-triggered
+  approaches all FAILED: the tablet's service layer crash-loops (shill/btmanagerd
+  SIGABRT on missing modules) + intermittent `i2c_designware` "timeout waiting for
+  bus ready", so upstart milestones never settle and the job never fired. Switched
+  to `init=/sbin/iconia-init.sh` (runs as PID 1, before upstart). It: mounts
+  essentials, does a **udev coldplug** (sdhci-acpi is built-in but its probe defers
+  until udev processes uevents — without this /dev/mmcblk0 never appears), runs
+  `chromeos-install --dst /dev/mmcblk0 --yes`, re-injects our 0x3f vmlinuz +
+  bootia32.efi + grub.cfg (PARTUUID fixed to eMMC ROOT-A) onto the eMMC ESP, and
+  powers off. Scripts: `boards/iconia-w4-820/install/{iconia-init,iconia-fixboot,
+  iconia-emmc-debug}.sh` + `iconia-install.conf` (obsolete upstart attempt).
+- **eMMC install SUCCEEDED**: eMMC ROOT-A PARTUUID=`95DE10DD-E5AA-0C49-8E23-A32012F41F14`,
+  eMMC vmlinuz xloadflags=`3f`. (postinst "verity hash verification failed" is
+  EXPECTED/harmless — we modified the rootfs and DON'T use ChromeOS verified boot;
+  we boot GRUB → vmlinuz → root=PARTUUID ro directly.)
+- **"No bootable device" FIXED via the bootmgfw trick.** A fixed eMMC boots only
+  via the firmware's persistent NVRAM "Windows Boot Manager" entry
+  (→ `\EFI\Microsoft\Boot\bootmgfw.efi`), NOT the removable-media fallback
+  (`\EFI\BOOT\BOOTIA32.EFI`) that boots the USB. No efivarfs (CONFIG_EFIVAR_FS
+  unset) to add an entry, so we copy our GRUB to that bootmgfw path
+  (`iconia-fixboot.sh`, now also folded into `iconia-init.sh`). Firmware then
+  loads our GRUB from eMMC → "Booting FydeOS".
+
+### The remaining problem — intermittent eMMC enumeration (KERNEL, not HW)
+- Firmware reads the eMMC reliably (loads bootmgfw→GRUB→vmlinuz off it fine, and
+  Windows booted it). The flakiness is purely the **Linux eMMC driver**: mmcblk0
+  enumerates only ~1/3 of boots; HS200 tuning likely intermittently fails. On eMMC
+  boot the kernel then hangs at `rootwait` waiting for mmcblk0p3.
+- Root cause = generic+trimmed kernel missing Bay Trail support. Config gaps found:
+  `CONFIG_I2C_DESIGNWARE_BAYTRAIL` unset; AXP288 PMIC + REGULATOR_AXP + PMIC_OPREGION
+  all absent.
+- **STAGED next experiment (ready to deploy): `iconia-emmc-debug.sh`** — re-injects
+  the eMMC grub.cfg with `sdhci.debug_quirks2=0x40` (SDHCI_QUIRK2_BROKEN_HS200 →
+  disable HS200, force a robuster mode) + a debug console (console=tty1 loglevel=7).
+  One boot then either boots reliably (quirk worked) or shows where it hangs.
+- **Proper fix if the quirk isn't enough: kernel rebuild** enabling
+  CONFIG_I2C_DESIGNWARE_BAYTRAIL + AXP288 PMIC/regulator/OPREGION (relax the trim),
+  rebuild kernel+modules, re-inject to eMMC ESP + ROOT-A.
+
+### Deploy recipe (build host crosh; USB moves letters sda<->sdb)
+```sh
+# find USB (7.45GiB = 15633408 sectors), mount, copy a script, point grub init= at it
+U=""; for d in sda sdb sdc; do [ "$(cat /sys/block/$d/size 2>/dev/null)" = 15633408 ] && U=$d; done
+sudo mount /dev/${U}3 /tmp/roota; sudo mount -o remount,rw /tmp/roota; sudo mount /dev/${U}12 /tmp/esp
+SRC=/media/fuse/crostini_1910d1979a76c12e132e98ff6ca5833087b4d2ce_termina_penguin/source/neilgfoster/iconia/boards/iconia-w4-820/install
+sudo cp "$SRC/<script>.sh" /tmp/roota/sbin/<script>.sh; sudo chmod +x /tmp/roota/sbin/<script>.sh
+sudo sed -i 's#init=[^ ]*#init=/sbin/<script>.sh#' /tmp/esp/boot/grub/grub.cfg   # or init=/sbin/init for normal
+sync; sudo umount /tmp/esp; sudo umount /tmp/roota
+# read a PID1 script's trace afterward: mount /dev/${U}3 and cat /iconia-*.log
+```
+- USB rootfs ro-compat already cleared → `mount -o remount,rw` works. Crostini home
+  visible to crosh host at the /media/fuse/... path above (repo lives there).
+- PID1 scripts log live to /dev/tty1 (+ /dev/kmsg) AND to a trace file on ROOT-A
+  (`/iconia-*.log`) — the ONLY reliable channel (USB-ESP FAT logs / dmesg / stateful
+  are lost on the hard power-offs these debug boots need).
+
+## Next actions (session 2 cont. / session 3)
+0. **Make eMMC boot reliable** (blocks a daily-usable device):
+   a. Deploy `iconia-emmc-debug.sh` (init=), boot USB once (applies HS200-off +
+      debug console to eMMC grub), remove USB, boot eMMC, power-cycle a few times.
+      If it now boots every time → quirk fixed it; revert console for production.
+   b. If not: kernel rebuild with Bay Trail I2C/PMIC/regulator (see build recipe in
+      the standalone-kernel notes above). Then re-inject kernel+modules to eMMC.
+
 
 1. Confirm the i915 flicker fix (grub `boots-2026-07-02` release `grub.cfg` /
    `boards/iconia-w4-820/boot/grub.cfg`). If flicker persists, try

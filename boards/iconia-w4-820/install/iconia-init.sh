@@ -52,6 +52,20 @@ say "=== iconia-init.sh running as PID $$ ==="
 
 partdev() { case "$1" in *[0-9]) echo "$1p$2" ;; *) echo "$1$2" ;; esac; }
 
+# --- coldplug: bring hardware up like a normal boot, but WITHOUT starting the
+# crash-looping services. sdhci-acpi is built-in but its probe defers until udev
+# processes uevents; without this, /dev/mmcblk0 never appears. udev only loads
+# drivers/firmware — it does NOT start shill/btmanagerd/dbus. ---
+say "coldplug: starting udevd + trigger + settle (no services)"
+mkdir -p /run/udev 2>/dev/null
+if command -v udevd >/dev/null 2>&1; then udevd --daemon 2>/dev/null
+elif [ -x /lib/systemd/systemd-udevd ]; then /lib/systemd/systemd-udevd --daemon 2>/dev/null
+fi
+udevadm trigger --type=subsystems --action=add 2>/dev/null
+udevadm trigger --type=devices --action=add 2>/dev/null
+udevadm settle --timeout=30 2>/dev/null
+say "coldplug done"
+
 # --- wait for the eMMC target to appear ---
 w=0
 while [ ! -b "$TARGET" ] && [ "$w" -lt 60 ]; do say "waiting for $TARGET ... ${w}s"; sleep 3; w=$((w+3)); done

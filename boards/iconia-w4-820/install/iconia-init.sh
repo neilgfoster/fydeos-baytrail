@@ -66,10 +66,25 @@ udevadm trigger --type=devices --action=add 2>/dev/null
 udevadm settle --timeout=30 2>/dev/null
 say "coldplug done"
 
+# capture the kernel's storage/probe view to the persistent trace so we can
+# diagnose eMMC enumeration offline on the build host.
+dump_storage_dmesg() {
+  { echo "===== dmesg (mmc/sdhci/i2c/lpss/dma/regulator/probe) @ $* ====="
+    dmesg 2>/dev/null | grep -iE 'mmc|sdhci|i2c|lpss|idma|dw_dmac|dma|regulator|80860f|deferred|probe|clk'
+    echo "===== /dev block devices ====="; ls -l /dev/mmc* /dev/sd* 2>/dev/null
+    echo "===== mmc_host sysfs ====="; ls -l /sys/class/mmc_host/ 2>/dev/null; ls -l /sys/bus/platform/devices/ 2>/dev/null | grep -iE '80860f|sdhci|mmc'
+  } >> "$TRACE" 2>&1
+  sync
+}
+dump_storage_dmesg "after-coldplug"
+
 # --- wait for the eMMC target to appear ---
 w=0
 while [ ! -b "$TARGET" ] && [ "$w" -lt 60 ]; do say "waiting for $TARGET ... ${w}s"; sleep 3; w=$((w+3)); done
-[ -b "$TARGET" ] || finish "FATAL: $TARGET never appeared" 30
+if [ ! -b "$TARGET" ]; then
+  dump_storage_dmesg "timeout-no-mmcblk0"
+  finish "FATAL: $TARGET never appeared (dmesg captured to $TRACE)" 30
+fi
 say "$TARGET present"
 
 # --- locate the USB (our boot disk) + its ESP (partition 12) ---

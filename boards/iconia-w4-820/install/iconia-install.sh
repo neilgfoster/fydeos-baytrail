@@ -1,14 +1,16 @@
 #!/bin/sh
 # Iconia W4-820 — one-shot eMMC auto-install (keyboard-free).
 #
-# Runs ON THE TABLET (booted from the USB) via the upstart job
-# iconia-install.conf, but ONLY when the boot cmdline contains
-# `iconia_install=1`. It:
+# Runs ON THE TABLET (booted from the USB), launched DETACHED by the upstart job
+# iconia-install.conf, but ONLY when the boot cmdline contains `iconia_install=1`.
+# It:
 #   1. installs FydeOS to the eMMC  (chromeos-install --dst /dev/mmcblk0 --yes)
 #   2. re-injects our 32-bit-UEFI boot chain onto the eMMC ESP
 #      (0x3f vmlinuz + bootia32.efi + production grub.cfg, root=PARTUUID fixed
 #      to the freshly-created eMMC ROOT-A)
-#   3. logs everything to the USB ESP (FAT — readable back on the build host)
+#   3. logs everything to the USB ESP (FAT — readable back on the build host),
+#      syncing after every line and mirroring to /dev/kmsg so progress survives
+#      a hard power-off and shows on a debug console.
 #   4. drops a sentinel so it NEVER runs twice, then powers off.
 #
 # The rootfs (eMMC ROOT-A) is a bitwise copy of the USB ROOT-A, so our injected
@@ -20,6 +22,11 @@ TARGET=/dev/mmcblk0
 UESP_MNT=/mnt/iconia-uesp
 EESP_MNT=/mnt/iconia-eesp
 
+# breadcrumb to the kernel log immediately — visible on a debug console and in
+# dmesg even if the USB ESP (our file log) can't be mounted.
+kmsg() { echo "ICONIA: $*" > /dev/kmsg 2>/dev/null || true; }
+kmsg "iconia-install.sh STARTED (pid $$)"
+
 partdev() {  # partdev <disk> <partnum> -> mmcblk0 -> mmcblk0p3 ; sda -> sda3
   case "$1" in
     *[0-9]) echo "$1p$2" ;;
@@ -30,13 +37,22 @@ partdev() {  # partdev <disk> <partnum> -> mmcblk0 -> mmcblk0p3 ; sda -> sda3
 # --- locate the USB (our boot disk) and its ESP (partition 12) ---
 USB_DISK="$(rootdev -s -d)"
 USB_ESP="$(partdev "$USB_DISK" 12)"
+kmsg "USB_DISK=$USB_DISK USB_ESP=$USB_ESP TARGET=$TARGET"
 
 mkdir -p "$UESP_MNT" "$EESP_MNT"
-mount "$USB_ESP" "$UESP_MNT" || { echo "FATAL: cannot mount USB ESP $USB_ESP"; exit 1; }
+if ! mount "$USB_ESP" "$UESP_MNT"; then
+  kmsg "FATAL: cannot mount USB ESP $USB_ESP — aborting"
+  exit 1
+fi
 
 LOG="$UESP_MNT/iconia-install.log"
 SENTINEL="$UESP_MNT/iconia-install.done"
-log() { echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*" | tee -a "$LOG"; }
+# log to the ESP file (sync'd so it survives a hard power-off) AND to /dev/kmsg.
+log() {
+  echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*" >> "$LOG"
+  sync
+  kmsg "$*"
+}
 
 if [ -e "$SENTINEL" ]; then
   log "sentinel present — install already ran; skipping."
@@ -47,13 +63,20 @@ fi
 log "=== iconia eMMC auto-install START ==="
 log "USB_DISK=$USB_DISK  USB_ESP=$USB_ESP  TARGET=$TARGET"
 { echo "--- lsblk ---"; lsblk; } >> "$LOG" 2>&1 || true
+sync
 
 # --- 1. install FydeOS to the eMMC (non-interactive) ---
+# keep flushing the FAT log while the (long, silent) installer runs, so if it
+# hangs and we have to hard-power-off, the log up to that point survives.
 log "running: chromeos-install --dst $TARGET --yes"
-if chromeos-install --dst "$TARGET" --yes >> "$LOG" 2>&1; then
+( while true; do sync; sleep 3; done ) & SYNCER=$!
+chromeos-install --dst "$TARGET" --yes >> "$LOG" 2>&1
+rc=$?
+kill "$SYNCER" 2>/dev/null
+sync
+if [ "$rc" -eq 0 ]; then
   log "chromeos-install SUCCESS"
 else
-  rc=$?
   log "chromeos-install FAILED rc=$rc — eMMC left as-is, NO sentinel (safe to retry)"
   umount "$UESP_MNT" 2>/dev/null
   exit "$rc"

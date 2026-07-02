@@ -8,18 +8,18 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 | Subsystem | Status | Likely driver / mechanism | Fix location | Notes |
 |-----------|--------|---------------------------|--------------|-------|
 | Boot (EFI handover) | ✅ works | `CONFIG_EFI_MIXED` + handover proto | **kernel** | xloadflags 0x3f; boots to OOBE. |
-| Display / KMS | untested | `i915` (Gen7 Valleyview) | kernel cfg + **cmdline** | Expect quirks; try `i915.enable_dc=0/psr=0`, or `nomodeset` fallback. Cmdline-only, no rebuild needed. |
-| Backlight / brightness | untested | `intel_backlight` / ACPI | kernel + **cmdline** | Try `acpi_backlight=native|vendor`. Common Bay Trail breakage. |
-| Panel rotation | untested | `i915` `fbcon=rotate:` + userspace | cmdline + userspace | Many Iconias have a natively-portrait panel. |
-| Wi-Fi | untested | likely `brcmfmac` (SDIO) or RTL | kernel + **firmware/rootfs** | Needs driver + `/lib/firmware/brcm/*.bin` + board `*.txt` NVRAM. |
+| Display / KMS | ✅ works | `i915` (Gen7 Valleyview) | kernel cfg + **cmdline** | Flicker FIXED via `i915.enable_psr=0 enable_fbc=0 enable_dc=0` (confirmed session 2). Smooth. |
+| Backlight / brightness | ❌ broken | `intel_backlight` / ACPI | kernel + **cmdline** | Brightness control does nothing at OOBE (session 2). Try `acpi_backlight=native|vendor`, `i915.enable_dpcd_backlight=1`. |
+| Panel rotation | ❌ broken | `i915` `fbcon=rotate:` + userspace | cmdline + userspace | No auto-rotate at OOBE (session 2). Accel/IIO likely not up. Panel may be natively portrait. |
+| Wi-Fi | ❌ broken | likely `brcmfmac` (SDIO) or RTL | kernel + **firmware/rootfs** | No WiFi at OOBE (session 2) → OOBE can't advance. Needs driver + `/lib/firmware/brcm/*.bin` + board `*.txt` NVRAM. |
 | Bluetooth | untested | `btbcm` / `hci_uart` | kernel + firmware | Paired with the Wi-Fi combo chip. |
-| Audio | ❌ broken | `intel_sst` `bytcr_rt5640` | kernel + **firmware (rootfs)** | `fw_sst_0f28.bin` failed to load (-2); No soundcards found. Needs firmware + UCM. |
+| Audio | ❌ broken | `intel_sst` `bytcr_rt5640` | kernel + **firmware (rootfs)** | No sound at OOBE (session 2). `fw_sst_0f28.bin` failed to load (-2); No soundcards found. Needs firmware + UCM. |
 | Touchscreen | ✅ works | I2C-HID (SYNA7300 / hid-multitouch) | kernel | Works out of the box at OOBE. |
-| Accelerometer / sensors | untested | IIO (`kxcjk-1013` etc.) | kernel | Drives auto-rotate. |
+| Accelerometer / sensors | ❌ broken | IIO (`kxcjk-1013` etc.) | kernel | No auto-rotate (session 2) → sensors likely absent. Check `dmesg`/`/sys/bus/iio`. |
 | eMMC | works (installer) | `sdhci-acpi` | kernel | Installer already reads/writes it. |
 | microSD | untested | `sdhci-acpi` | kernel | |
-| USB (OTG) | partial | `dwc3` / xhci | kernel | OTG adapter used to attach the installer USB. |
-| Battery / charging | untested | `axp288` PMIC + fuel gauge | kernel | Bay Trail uses AXP288 PMIC; needs those drivers. |
+| USB (OTG) | partial | `dwc3` / xhci | kernel | OTG adapter used to attach the installer USB. OTG keyboard input DEAD → no tablet terminal. |
+| Battery / charging | partial | `axp288` PMIC + fuel gauge | kernel | Reports 100% at OOBE (session 2) — fuel gauge reads. Charging behaviour untested. |
 | Suspend (S0ix/S3) | untested | PM / ACPI | **firmware-limited** | Often half-broken on Bay Trail; may not be fixable. |
 | Cameras | untested | atomisp / uvc | kernel + firmware | atomisp is notoriously painful; may be a write-off. |
 

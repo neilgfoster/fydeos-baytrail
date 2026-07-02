@@ -32,6 +32,13 @@ emit() {
   sync
 }
 
+# loud, repeated banner so it stands out amid service crash-loop spam
+i=0
+while [ "$i" -lt 5 ]; do
+  echo "" > "$CON" 2>/dev/null
+  echo "########## ICONIA INSTALL STARTED ##########" > "$CON" 2>/dev/null
+  i=$((i+1))
+done
 emit "=== iconia-install.sh STARTED (pid $$) ==="
 
 partdev() {  # mmcblk0 -> mmcblk0p3 ; sda -> sda3
@@ -40,6 +47,14 @@ partdev() {  # mmcblk0 -> mmcblk0p3 ; sda -> sda3
     *)      echo "$1$2"  ;;
   esac
 }
+
+# wait for the eMMC target device node to appear (udev may still be settling)
+w=0
+while [ ! -b "$TARGET" ] && [ "$w" -lt 60 ]; do
+  emit "waiting for $TARGET ... ${w}s"
+  sleep 3; w=$((w+3))
+done
+[ -b "$TARGET" ] && emit "$TARGET present" || emit "WARN: $TARGET still absent after ${w}s"
 
 USB_DISK="$(rootdev -s -d)"
 USB_ESP="$(partdev "$USB_DISK" 12)"

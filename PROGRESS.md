@@ -171,9 +171,12 @@ and repo-sync notes above; the standalone recipe is the source of truth.
   (writable both ways — used it to pull `kern-a.bin` from the host too).
 - All work: `inspect`/`inject` in crosh `shell`; kernel/module BUILD in Crostini.
 
-### In-flight when we stopped
-- Just swapped grub to production cmdline with **i915.enable_psr=0 enable_fbc=0
-  enable_dc=0** to fix the **flickering** (Bay Trail PSR). Awaiting confirmation it helped.
+### Flicker fix — CONFIRMED (session 2, 2026-07-02)
+- Production grub.cfg with **i915.enable_psr=0 enable_fbc=0 enable_dc=0** written to
+  USB ESP (`/dev/sda12`, part 12) and verified by SHA
+  (`9f62151bc57c39afd366a8bdf6f203ddae3d930376502b9d0851196bf75aae09`, matches repo
+  `boards/iconia-w4-820/boot/grub.cfg`). Booted on tablet → **no flicker, much smoother.**
+  Bay Trail PSR was the cause. This grub.cfg is the production baseline going forward.
 - Slowness is partly inherent (2GB + running off slow USB) — eMMC install will help.
 
 ## Next actions (session 2)

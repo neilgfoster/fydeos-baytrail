@@ -49,6 +49,20 @@ sleep 3
     ls -1 "$d" 2>/dev/null | tr '\n' ' '; echo
   done
 
+  echo "===== HID devices (group/driver) + SMO91D0 report descriptor ====="
+  for h in /sys/bus/hid/devices/*; do
+    [ -e "$h" ] || { echo "(none)"; break; }
+    hn=$(cat "$h/uevent" 2>/dev/null | grep -E 'HID_NAME|HID_ID' | tr '\n' ' ')
+    echo "-- $(basename "$h"): driver=$(readlink "$h/driver" 2>/dev/null | sed 's#.*/##') group=$(cat "$h/group" 2>/dev/null) $hn"
+  done
+  echo "--- report_descriptor of the SMO91D0 HID node (hex) ---"
+  for h in /sys/bus/hid/devices/*91D1*; do
+    [ -e "$h/report_descriptor" ] || continue
+    od -An -tx1 "$h/report_descriptor" 2>/dev/null
+    echo "--- usage-page 0x20 (HID Sensor) present in descriptor? ---"
+    od -An -tx1 "$h/report_descriptor" 2>/dev/null | grep -q ' 05 20' && echo "YES (standard HID sensor usage page found)" || echo "NO (no 05 20 -> vendor/custom, sensor-hub won't claim it)"
+  done
+
   echo "===== /sys/bus/iio/devices ====="
   for d in /sys/bus/iio/devices/*; do [ -e "$d" ] || { echo "(none)"; break; }; echo "-- $(basename "$d"): name=$(cat "$d/name" 2>/dev/null)"; done
 

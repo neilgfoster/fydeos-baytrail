@@ -25,7 +25,7 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 | Audio | ❌ broken | contended: `intel_sst_acpi` vs `snd_sof` | kernel + **firmware+topology+UCM** | Session 3: BOTH legacy SST and SOF drivers load, neither gets firmware → no card. `fw_sst_0f28.bin` -2; SOF needs `sof-byt*.ri`+`.tplg`. Pick ONE stack, provide its fw/topology + ALSA UCM. Classic Bay Trail mess. |
 | Touchscreen | ✅ works | I2C-HID (SYNA7300 / hid-multitouch) | kernel | Works out of the box at OOBE. |
 | Accelerometer / sensors | ❌ broken | IIO (`kxcjk-1013`) / `SMO91D0` hub | kernel | Session 3: no IIO devices; `i2c-SMO91D0:00 can't add hid device -5`. Accel likely behind sensor hub / i2c_designware issue. |
-| eMMC | works (installer) | `sdhci-acpi` | kernel | Installer already reads/writes it. |
+| eMMC | ✅ works | `sdhci-acpi` + `I2C_DESIGNWARE_BAYTRAIL` | kernel | Reliable boot. Bay Trail rebuild booted first-try (i2c semaphore likely fixed enumeration). Still carries `sdhci.debug_quirks2=0x40` (HS200 off) in grub — test dropping it over more power-cycles. |
 | microSD | untested | `sdhci-acpi` | kernel | |
 | USB (OTG) | partial | `dwc3` / xhci | kernel | OTG adapter used to attach the installer USB. OTG keyboard input DEAD → no tablet terminal. |
 | Battery / charging | partial | `axp288` PMIC + fuel gauge | kernel | Reports 100% at OOBE (session 2) — fuel gauge reads. Charging behaviour untested. |

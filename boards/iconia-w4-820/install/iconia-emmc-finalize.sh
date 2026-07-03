@@ -7,10 +7,11 @@
 #     install bitwise-copied that rootfs to the eMMC, so the eMMC also has no UI
 #     -> boots to console spam, never OOBE. Restore /etc/init/ui.conf on eMMC
 #     ROOT-A (mmcblk0p3).
-#  2. CLEAN THE GRUB. Strip the debug console (console=tty1/earlycon/keep_bootcon,
-#     loglevel 7->4) from the eMMC grub.cfg so OOBE draws cleanly. KEEP
-#     sdhci.debug_quirks2=0x40 (the HS200-off quirk that made eMMC enumeration
-#     reliable) and the i915 flicker flags.
+#  2. TIDY THE GRUB (but KEEP the boot console — the user wants boot-activity
+#     evidence in production). Drop ONLY `keep_bootcon` so the UI (frecon) can
+#     draw OOBE, but KEEP console=tty1 earlycon=efifb loglevel=7 for visible boot
+#     logs, plus sdhci.debug_quirks2=0x40 (HS200-off; makes eMMC reliable) and the
+#     i915 flicker flags.
 #
 # Run via init=/sbin/iconia-emmc-finalize.sh from the USB, then remove USB and
 # boot the eMMC -> should reach OOBE reliably.
@@ -65,10 +66,9 @@ if mount "$EMMC_ESP" "$EESP_MNT" 2>/dev/null; then
   G="$EESP_MNT/boot/grub/grub.cfg"
   if [ -f "$G" ]; then
     say "--- grub BEFORE ---"; grep '  linux' "$G" >> "$TRACE" 2>&1
-    sed -i \
-      -e 's/ console=tty1//; s/ earlycon=efifb//; s/ keep_bootcon//' \
-      -e 's/loglevel=7/loglevel=4/' \
-      "$G"
+    # keep console=tty1/earlycon/loglevel=7 for visible boot logs; drop only
+    # keep_bootcon so frecon can take the display for OOBE.
+    sed -i 's/ keep_bootcon//' "$G"
     say "--- grub AFTER ---"; grep '  linux' "$G" >> "$TRACE" 2>&1
     sync
   else

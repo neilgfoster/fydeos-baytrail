@@ -357,11 +357,28 @@ intel audio, regulatory.db). A FAILED reinject leaves a partial module tree (rm 
 + extract died) → device bootloops (last console line "bootconsole disabled"); the
 cure is simply a successful reinject.
 
+## 🟡 AUTO-ROTATE: kernel DONE, blocked on FydeOS userspace (session 4, 2026-07-03)
+
+The accelerometer is an **STMicro HID-over-I2C sensor hub** (ACPI `SMO91D0`, _CID
+`PNP0C50`, VID:PID `0483:91D1`), NOT a raw IIO accel — its report descriptor is a
+standard HID sensor (usage page `05 20`, accel collection `09 73`). Enabled the HID
+sensor stack (`HID_SENSOR_HUB` + `HID_SENSOR_ACCEL_3D`/gyro/magn/incl/rotation/als,
+all `=m`) in `baytrail-hw.config` → kernel **6.6.76 #9**. **Verified on the eMMC**
+(via `iconia-emmc-sensor-check.sh` — LoadPin blocks side-loading modules from a
+non-booted rootfs, so the test must run on the eMMC): `hid-sensor-hub` binds
+SMO91D0 and all six iio devices appear incl. `iio:device3 name=accel_3d` and
+`dev_rotation`. **So the kernel side is complete; remaining no-rotate is FydeOS
+userspace** (iioservice/mems_setup: the HID accel likely lacks a `location=lid`
+tag / mount-matrix wiring Chrome needs). Needs dev-mode/crosh shell to inspect —
+NOT yet done. Kernel diag artifacts: `install/iconia-sensor-diag.sh`,
+`iconia-sensor-load.sh` (LoadPin-blocked), `iconia-emmc-sensor-check.sh`.
+
 ## Next actions (session 4)
 
-**State: BACKLIGHT DONE. Tablet boots FydeOS from eMMC standalone; wifi/touch/
-display/brightness all work. Kernel 6.6.76 #8 (i915=m). Working tree: config +
-reinject-script changes committed.**
+**State: BACKLIGHT DONE; AUTO-ROTATE kernel-ready (accel_3d enumerates) but not
+rotating (FydeOS userspace). Tablet boots FydeOS from eMMC standalone; wifi/touch/
+display/brightness all work. Kernel now 6.6.76 #9 (i915=m + HID sensor stack).
+Working tree: config + all diag/util scripts committed.**
 
 Build artifacts on the Crostini build host (NOT in git): `~/openfyde/kernel-6.6/`
 (.config = #8, i915=m), `~/openfyde/modules-baytrail.tar` (201M, i915=m set),

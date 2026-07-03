@@ -3,6 +3,15 @@
 Track each subsystem across sessions. Update **Status** as we test on hardware.
 Statuses: `untested` / `broken` / `partial` / `works`.
 
+> **Session 3 key insight — a stale `modules.dep` was blocking ALL module autoload.**
+> After injecting the 6.6.76 modules we never ran `depmod`, so `modules.dep`/`.alias`
+> had 0 brcmfmac entries → udev couldn't autoload *any* module (WiFi/BT/audio/sensors).
+> Also `CONFIG_FW_LOADER_COMPRESS` is unset but firmware ships only as `.xz`, so
+> `request_firmware(<name>.bin)` fails -2. **General fix pattern for module-based HW:**
+> `depmod -b <root> 6.6.76-gabcfb16364e1` + decompress the needed `/lib/firmware/*.xz`
+> in place (+ board NVRAM where needed). Done on eMMC ROOT-A by `iconia-wifi-fix.sh`.
+> Re-test BT/audio/sensors now that autoload works and audio fw was decompressed.
+
 SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no CSM.
 
 | Subsystem | Status | Likely driver / mechanism | Fix location | Notes |
@@ -11,7 +20,7 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 | Display / KMS | ✅ works | `i915` (Gen7 Valleyview) | kernel cfg + **cmdline** | Flicker FIXED via `i915.enable_psr=0 enable_fbc=0 enable_dc=0` (confirmed session 2). Smooth. |
 | Backlight / brightness | ❌ broken | `intel_backlight` / ACPI | kernel + **cmdline** | Brightness control does nothing at OOBE (session 2). Try `acpi_backlight=native|vendor`, `i915.enable_dpcd_backlight=1`. |
 | Panel rotation | ❌ broken | `i915` `fbcon=rotate:` + userspace | cmdline + userspace | No auto-rotate at OOBE (session 2). Accel/IIO likely not up. Panel may be natively portrait. |
-| Wi-Fi | ❌ broken | likely `brcmfmac` (SDIO) or RTL | kernel + **firmware/rootfs** | No WiFi at OOBE (session 2) → OOBE can't advance. Needs driver + `/lib/firmware/brcm/*.bin` + board `*.txt` NVRAM. |
+| Wi-Fi | ✅ works | `brcmfmac` SDIO, **BCM43241** (SDIO 02D0:4324) | rootfs (depmod+fw+nvram) | FIXED session 3: `depmod` (modules.dep had 0 brcmfmac — stale index blocked ALL module autoload) + decompress `brcmfmac43241b4-sdio.bin` (.xz unloadable, FW_LOADER_COMPRESS off) + NVRAM `brcmfmac43241b4-sdio.Acer-Iconia W4-820P.txt` (from VALLEYVIEW C0). Visible + connected. |
 | Bluetooth | untested | `btbcm` / `hci_uart` | kernel + firmware | Paired with the Wi-Fi combo chip. |
 | Audio | ❌ broken | `intel_sst` `bytcr_rt5640` | kernel + **firmware (rootfs)** | No sound at OOBE (session 2). `fw_sst_0f28.bin` failed to load (-2); No soundcards found. Needs firmware + UCM. |
 | Touchscreen | ✅ works | I2C-HID (SYNA7300 / hid-multitouch) | kernel | Works out of the box at OOBE. |

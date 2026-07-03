@@ -265,7 +265,9 @@ eMMC ROOT-A PARTUUID = `95DE10DD-E5AA-0C49-8E23-A32012F41F14`.
 1. ✅ **eMMC boot reliability CONFIRMED** — ~5/5 cold power-cycles booted to OOBE
    with the HS200-off quirk. (If a boot ever hangs at rootwait, the durable fix is
    the Bay Trail kernel rebuild below.)
-2. **Hardware follow-ups** (now on a stable eMMC base) — see `hardware-status.md`:
+2. ✅ **Wi-Fi WORKS** (BCM43241) — depmod + fw decompress + NVRAM (iconia-wifi-fix.sh).
+   Remaining HW follow-ups now that module autoload works: audio (fw_sst decompressed
+   this pass — re-test), bluetooth, backlight, sensors/auto-rotate. See hardware-status.md.
    Wi-Fi (brcmfmac + firmware/NVRAM), audio (fw_sst_0f28.bin + UCM), backlight,
    auto-rotate/sensors, bluetooth. WiFi is needed to complete OOBE sign-in.
 3. **Optional kernel rebuild** enabling `CONFIG_I2C_DESIGNWARE_BAYTRAIL` + AXP288

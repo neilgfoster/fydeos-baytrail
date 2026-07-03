@@ -384,12 +384,52 @@ accel with `location`/`label=accel-display` + an identity mount-matrix so
 iioservice exposes it to Chrome. The `armsensor` toggle can DISARM (restore
 init=/sbin/init) by re-running it.
 
+## 🟡 AUDIO: kernel DONE, blocked on routing/UCM (session 4, 2026-07-03)
+
+Codec = **Realtek RT5640** (i2c `10EC5640`). trim.config had dropped both
+`SND_SOC_RT5640` and `SND_SOC_INTEL_BYTCR_RT5640_MACH`, so no card was created.
+Enabled both → kernel **6.6.76 #10** (reinjected to eMMC). CRAS now shows volume
+sliders and a card exists, BUT **no sound out** (ChromeVox silent; brute-unmute +
+`speaker-test` on every card via `iconia-audio-diag.sh` produced nothing audible).
+Rootfs HAS `fw_sst_0f28.bin.xz` AND `sof-byt.ri`+`sof-byt-rt5640.tplg`, and
+`aplay/amixer/speaker-test/cras`, but **UCM only ships `sof-hda-dsp`** (nothing for
+our card) → CRAS can't route it. Next: identify which DSP/card loaded (SST vs SOF)
+and supply a matching UCM (+ maybe force legacy SST via
+`snd_intel_dspcfg.dsp_driver=1`). Best done live once SSH/shell debugging is up.
+
+## 🔧 SSH-for-live-debug (in progress, session 4) — the current focus
+
+Goal: a root shell on the tablet to iterate audio/sensors without the multi-boot
+PID1 loop (OTG keyboard now works; dev mode + `cros_debug` enabled; crosh `shell`
+works; tablet IP **192.168.1.31**). Facts established:
+- Our debug SSH key: build host `~/.ssh/iconia_ed25519` (pub in tablet
+  `/root/.ssh/authorized_keys`). Crostini CANNOT reach the LAN (NAT) — ssh must run
+  from the crosh host (on LAN) or a local agent.
+- FydeOS `sshd_config` expects host keys at **`/mnt/stateful_partition/etc/ssh/`**
+  (not /etc/ssh). Copied ours there.
+- Inbound is firewalled: `iptables -I INPUT -p tcp --dport 22 -j ACCEPT` (resets each
+  boot). Suspend/resume is broken (screen won't wake) → run `stop powerd` while
+  debugging.
+- **BLOCKER**: manual `sshd -o UsePAM=no -o PermitRootLogin=prohibit-password -o
+  AuthorizedKeysFile=/root/.ssh/authorized_keys` LISTENS and accepts the connection,
+  but the **preauth privsep child exits 255 right after `permanently_set_uid`** (no
+  `fatal:` line; no seccomp dmesg because `audit=0`). Kernel HAS SECCOMP+FILTER.
+- `fydeos-sshd-server` job = reverse tunnel for cloud "remote-help", NOT a local
+  listener (dead end). **UNTRIED: `start openssh-server`** (the other job in
+  /etc/init) — may be a normal local sshd that just works; try this FIRST.
+- Also install an x86_64 static node for a LOCAL agent: ChromeOS base has **no
+  libstdc++**, so official node fails; use a self-contained build or ship libstdc++.
+  `/usr/local` is writable+exec in dev mode.
+- Repo: `install/iconia-emmc-sshsetup.sh` installs sshd via upstart + adds
+  `cros_debug` to eMMC grub. Prod grub.cfg now carries `cros_debug` [[iconia-final-build-cros-debug]].
+
 ## Next actions (session 4)
 
-**State: BACKLIGHT DONE; AUTO-ROTATE kernel-ready (accel_3d enumerates) but not
-rotating (FydeOS userspace). Tablet boots FydeOS from eMMC standalone; wifi/touch/
-display/brightness all work. Kernel now 6.6.76 #9 (i915=m + HID sensor stack).
-Working tree: config + all diag/util scripts committed.**
+**State: BACKLIGHT DONE; AUDIO kernel-ready (card exists, no routing/UCM);
+AUTO-ROTATE kernel-ready (accel_3d enumerates) but not rotating (FydeOS userspace).
+Tablet boots FydeOS from eMMC standalone; wifi/touch/display/brightness work.
+Kernel now 6.6.76 #10 (i915=m + HID sensors + RT5640). Actively standing up SSH/
+local-agent for live debugging.**
 
 Build artifacts on the Crostini build host (NOT in git): `~/openfyde/kernel-6.6/`
 (.config = #8, i915=m), `~/openfyde/modules-baytrail.tar` (201M, i915=m set),

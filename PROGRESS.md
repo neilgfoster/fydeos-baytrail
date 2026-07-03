@@ -442,9 +442,40 @@ works; tablet IP **192.168.1.31**). Facts established:
 - Repo: `install/iconia-emmc-sshsetup.sh` installs sshd via upstart + adds
   `cros_debug` to eMMC grub. Prod grub.cfg now carries `cros_debug` [[iconia-final-build-cros-debug]].
 
+## 🟠 AUTO-ROTATE (session 4, 2026-07-03) — kernel/sensor DONE, blocked in iioservice
+
+Chased end-to-end over the live SSH shell. What WORKS now:
+- Tablet mode forced via `/etc/chrome_dev.conf` (`--enable-tablet-form-factor`
+  `--force-tablet-mode=touch_view`). ChromeOS UI is in tablet mode.
+- HID accel driver patched (`patches/hid-accel-rotation.patch`, applied to
+  `~/openfyde/kernel-6.6/drivers/iio/accel/hid-sensor-accel-3d.c`): exposes
+  `label=accel-display`, `in_accel_location=lid` (ext_info SHARED_BY_TYPE), and
+  `in_accel_mount_matrix` (identity). iioservice now reads all of these (its
+  location/label/mount_matrix errors are gone for accel_3d).
+- **Chrome ADOPTS the accel**: chrome log shows `Enter tablet mode` + ash
+  `accel_gyro_samples_observer` actively polling the accel device.
+- **Sensor streams**: reading `/dev/iio:deviceN` directly (buffer enabled, freq=10,
+  record=24B: 3×s32 + s64 ts) yields live changing X/Y/Z at ~10Hz.
+
+THE WALL: ash logs `Device N: A read timed out` repeatedly — **iioservice's
+buffered read of the accel times out even though the raw buffer streams when we
+read it directly**. freq is correctly 10, buffer/buffer0 enabled. The one thing
+iioservice still can't read is `in_accel_sampling_frequency_available` (ENOENT).
+Likely a closed iioservice ↔ iio buffer-fd interaction; skeptical the missing
+`_available` is the cause since the rate is already set and the buffer streams.
+=> Kernel/sensor side is COMPLETE; remaining work is in closed ChromeOS userspace
+(iioservice/ash) or a subtle iio buffer-fd path. Reasonable to PARK here.
+
+**Vermagic gotcha for module-only rebuilds** (learned here): editing a kernel
+source file makes the tree dirty → module vermagic gets `-dirty` and won't load on
+the deployed #10 kernel (`6.6.76-gabcfb16364e1`). Fix: patched
+`scripts/setlocalversion` to call `scm_version --no-dirty` (in the patch). Then a
+single `.ko` can be rebuilt + hot-pushed over SSH:
+`ssh root@IP 'mount -o remount,rw /; cat > /lib/modules/<ver>/kernel/.../x.ko.gz; mount -o remount,ro /' < x.ko.gz` then reboot.
+
 ## Next actions (session 4)
 
-**State: BACKLIGHT DONE; AUDIO kernel-ready (card exists, no routing/UCM);
+**State: BACKLIGHT DONE; AUDIO DONE (UCM);
 AUTO-ROTATE kernel-ready (accel_3d enumerates) but not rotating (FydeOS userspace).
 Tablet boots FydeOS from eMMC standalone; wifi/touch/display/brightness work.
 Kernel now 6.6.76 #10 (i915=m + HID sensors + RT5640). Actively standing up SSH/

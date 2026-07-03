@@ -1,0 +1,95 @@
+diff --git a/drivers/iio/accel/hid-sensor-accel-3d.c b/drivers/iio/accel/hid-sensor-accel-3d.c
+index 5eac7ea19..b599813da 100644
+--- a/drivers/iio/accel/hid-sensor-accel-3d.c
++++ b/drivers/iio/accel/hid-sensor-accel-3d.c
+@@ -35,6 +35,35 @@ struct accel_3d_state {
+ 	int scale_precision;
+ 	int value_offset;
+ 	int64_t timestamp;
++	struct iio_mount_matrix mount_matrix;
++};
++
++/* Iconia W4-820: expose a mount matrix + location so ChromeOS ash/iioservice
++ * treats this HID accelerometer like a cros-ec one and uses it for screen
++ * auto-rotation. */
++static const struct iio_mount_matrix *
++accel_3d_get_mount_matrix(const struct iio_dev *indio_dev,
++			  const struct iio_chan_spec *chan)
++{
++	struct accel_3d_state *accel_state = iio_priv(indio_dev);
++
++	return &accel_state->mount_matrix;
++}
++
++static ssize_t accel_3d_location_read(struct iio_dev *indio_dev, uintptr_t priv,
++				      const struct iio_chan_spec *chan, char *buf)
++{
++	return sysfs_emit(buf, "lid\n");
++}
++
++static const struct iio_chan_spec_ext_info accel_3d_ext_info[] = {
++	IIO_MOUNT_MATRIX(IIO_SHARED_BY_TYPE, accel_3d_get_mount_matrix),
++	{
++		.name = "location",
++		.shared = IIO_SHARED_BY_TYPE,
++		.read = accel_3d_location_read,
++	},
++	{ }
+ };
+ 
+ static const u32 accel_3d_addresses[ACCEL_3D_CHANNEL_MAX] = {
+@@ -58,6 +87,7 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+ 		BIT(IIO_CHAN_INFO_SCALE) |
+ 		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
+ 		BIT(IIO_CHAN_INFO_HYSTERESIS),
++		.ext_info = accel_3d_ext_info,
+ 		.scan_index = CHANNEL_SCAN_INDEX_X,
+ 	}, {
+ 		.type = IIO_ACCEL,
+@@ -68,6 +98,7 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+ 		BIT(IIO_CHAN_INFO_SCALE) |
+ 		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
+ 		BIT(IIO_CHAN_INFO_HYSTERESIS),
++		.ext_info = accel_3d_ext_info,
+ 		.scan_index = CHANNEL_SCAN_INDEX_Y,
+ 	}, {
+ 		.type = IIO_ACCEL,
+@@ -78,6 +109,7 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+ 		BIT(IIO_CHAN_INFO_SCALE) |
+ 		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
+ 		BIT(IIO_CHAN_INFO_HYSTERESIS),
++		.ext_info = accel_3d_ext_info,
+ 		.scan_index = CHANNEL_SCAN_INDEX_Z,
+ 	},
+ 	IIO_CHAN_SOFT_TIMESTAMP(CHANNEL_SCAN_INDEX_TIMESTAMP)
+@@ -387,6 +419,14 @@ static int hid_accel_3d_probe(struct platform_device *pdev)
+ 	indio_dev->name = name;
+ 	indio_dev->modes = INDIO_DIRECT_MODE;
+ 
++	/* Iconia W4-820: tag the HID accelerometer as the display/lid sensor so
++	 * ChromeOS iioservice/ash uses it for screen auto-rotation (HID sensors
++	 * otherwise expose no label/location, unlike cros-ec accels). */
++	if (!strcmp(name, "accel_3d")) {
++		indio_dev->label = "accel-display";
++		iio_read_mount_matrix(&pdev->dev, &accel_state->mount_matrix);
++	}
++
+ 	atomic_set(&accel_state->common_attributes.data_ready, 0);
+ 
+ 	ret = hid_sensor_setup_trigger(indio_dev, name,
+diff --git a/scripts/setlocalversion b/scripts/setlocalversion
+index 5818465ab..48ccd305e 100755
+--- a/scripts/setlocalversion
++++ b/scripts/setlocalversion
+@@ -192,8 +192,9 @@ config_localversion=$(sed -n 's/^CONFIG_LOCALVERSION=\(.*\)$/\1/p' include/confi
+ 
+ # scm version string if not at the kernel version tag or at the file_localversion
+ if grep -q "^CONFIG_LOCALVERSION_AUTO=y$" include/config/auto.conf; then
+-	# full scm version string
+-	scm_version="$(scm_version)"
++	# full scm version string (Iconia: --no-dirty so a working-tree edit still
++	# produces vermagic 6.6.76-gabcfb16364e1 matching the deployed #10 kernel)
++	scm_version="$(scm_version --no-dirty)"
+ elif [ "${LOCALVERSION+set}" != "set" ]; then
+ 	# If the variable LOCALVERSION is not set, append a plus
+ 	# sign if the repository is not in a clean annotated or

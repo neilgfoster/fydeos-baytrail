@@ -46,6 +46,11 @@ mkdir -p "$R/etc/ssh"
 [ -f "$R/etc/ssh/ssh_host_rsa_key" ]     || ssh-keygen -q -t rsa -b 2048 -N '' -f "$R/etc/ssh/ssh_host_rsa_key" 2>>"$TRACE"
 say "host keys: $(ls "$R/etc/ssh"/ssh_host_*_key 2>/dev/null | tr '\n' ' ')"
 
+# --- privsep user (modern OpenSSH refuses to start without it) ---
+grep -q '^sshd:' "$R/etc/passwd" 2>/dev/null || printf 'sshd:x:33:33:sshd:/run/sshd:/bin/false\n' >> "$R/etc/passwd"
+grep -q '^sshd:' "$R/etc/group"  2>/dev/null || printf 'sshd:x:33:\n' >> "$R/etc/group"
+say "sshd user: $(grep '^sshd:' "$R/etc/passwd")"
+
 # --- authorized_keys for root ---
 mkdir -p "$R/root/.ssh"; chmod 700 "$R/root/.ssh"
 printf '%s\n' "$PUBKEY" > "$R/root/.ssh/authorized_keys"
@@ -54,13 +59,16 @@ say "authorized_keys installed"
 
 # --- upstart job to run sshd with safe -o overrides ---
 cat > "$R/etc/init/iconia-sshd.conf" <<'EOF'
-# Iconia debug SSH (key-only root login). Starts sshd over wifi (shill-managed).
-start on started system-services
-stop on stopping system-services
+# Iconia debug SSH (key-only root login). boot-services is an early, reliable
+# ChromeOS milestone; sshd binds even before wifi is up. Opens the inbound
+# firewall (ChromeOS drops inbound by default) then runs sshd with -o overrides.
+start on started boot-services
 respawn
-respawn limit 10 120
+respawn limit 20 120
 pre-start script
   mkdir -p /run/sshd
+  iptables  -I INPUT -p tcp --dport 22 -j ACCEPT || true
+  ip6tables -I INPUT -p tcp --dport 22 -j ACCEPT || true
 end script
 exec /usr/sbin/sshd -D \
   -o PermitRootLogin=prohibit-password \
@@ -69,8 +77,7 @@ exec /usr/sbin/sshd -D \
   -o KbdInteractiveAuthentication=no \
   -o UsePAM=no \
   -o AuthorizedKeysFile=/root/.ssh/authorized_keys \
-  -o PidFile=/run/sshd.pid \
-  -o ListenAddress=0.0.0.0
+  -o PidFile=/run/sshd.pid
 EOF
 say "upstart job /etc/init/iconia-sshd.conf written"
 sync

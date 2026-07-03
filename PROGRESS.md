@@ -262,9 +262,9 @@ Full keyboard-free eMMC install achieved. Recap of what made it work:
 eMMC ROOT-A PARTUUID = `95DE10DD-E5AA-0C49-8E23-A32012F41F14`.
 
 ## Next actions (session 3)
-1. **Confirm eMMC boot reliability** across several cold power-cycles (first boot
-   to OOBE worked; verify it's consistent). If any boot still hangs at rootwait,
-   the durable fix is the kernel rebuild (Bay Trail I2C/PMIC — see below).
+1. ✅ **eMMC boot reliability CONFIRMED** — ~5/5 cold power-cycles booted to OOBE
+   with the HS200-off quirk. (If a boot ever hangs at rootwait, the durable fix is
+   the Bay Trail kernel rebuild below.)
 2. **Hardware follow-ups** (now on a stable eMMC base) — see `hardware-status.md`:
    Wi-Fi (brcmfmac + firmware/NVRAM), audio (fw_sst_0f28.bin + UCM), backlight,
    auto-rotate/sensors, bluetooth. WiFi is needed to complete OOBE sign-in.

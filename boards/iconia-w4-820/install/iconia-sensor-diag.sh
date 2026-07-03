@@ -23,6 +23,13 @@ say "=== iconia-sensor-diag.sh PID $$ ==="
 mkdir -p /run/udev; udevd --daemon 2>/dev/null || /lib/systemd/systemd-udevd --daemon 2>/dev/null
 udevadm trigger --action=add 2>/dev/null; udevadm settle --timeout=15 2>/dev/null
 sleep 3
+# Explicitly load the HID-sensor stack from the DEFAULT module path (= the booted
+# rootfs, so LoadPin permits it). No-op on the USB rootfs (modules absent); on the
+# eMMC #9 rootfs these are present and this forces the accel to enumerate.
+for m in hid-sensor-hub hid-sensor-accel-3d hid-sensor-incl-3d hid-sensor-rotation hid-sensor-als; do
+  modprobe "$m" 2>>"$TRACE" && say "modprobe $m OK" || say "modprobe $m (absent/failed)"
+done
+udevadm trigger --action=add 2>/dev/null; udevadm settle --timeout=10 2>/dev/null; sleep 2
 
 {
   echo "===== ACPI devices with SMO*/KIOX*/BOSC*/accel-ish HIDs ====="

@@ -305,3 +305,30 @@ cd ~/openfyde/kernel-6.6 && make olddefconfig && make -j$(nproc) bzImage
 # ALWAYS after a kernel config change, rebuild+re-inject modules (modules.builtin!):
 make -j$(nproc) modules && make modules_install INSTALL_MOD_PATH=<stage>
 ```
+
+
+## ⭐ SESSION 3 WRAP (2026-07-03)
+
+Kernel rebuilt with Bay Trail HW enablement (`baytrail-hw.config`) → 6.6.76 #6,
+xloadflags still 0x3f, re-injected to eMMC (`iconia-kernel-reinject.sh`).
+
+**Working now:** eMMC standalone boot (first-try since the rebuild — i2c semaphore
+likely fixed enumeration; HS200 quirk still in grub, try dropping it), **Wi-Fi**
+(now native `.xz` firmware via `FW_LOADER_COMPRESS_XZ`), touchscreen, display.
+
+**Still broken / follow-ups (all polish; device is usable):**
+- **Backlight** ❌ HARD — `/sys/class/backlight` empty even with PWM_CRC; i915
+  `[DSI-1] Failed to get the PMIC PWM chip`; Crystal Cove PMIC does NOT bind →
+  board uses a different backlight PWM path. Needs investigation (AXP288 / LPSS
+  PWM / panel-native). Screen usable at full brightness.
+- **Audio** ❌ — SST vs SOF contend, no firmware/topology/UCM.
+- **Auto-rotate/sensors** ❌ — accel didn't come up (SMO91D0 hub / i2c).
+- **Bluetooth** 🟡 — stack loads, no hci0 (UART controller not bound).
+
+**Utility-boot pattern (all the `iconia-*.sh` in `install/`):** deploy script to
+USB `/sbin`, point grub `init=` at it, PID1 does the work, logs to ROOT-A trace +
+/dev/tty1, powers off. eMMC reached via sdhci-acpi rebind + identity detect
+(rebind RENUMBERS mmc → find big mmcblk). **USB ROOT-A is ~100% full & re-enumerates
+sda<->sdb** — mount fresh each time; free space by removing decompressed fw dupes.
+
+## Next actions (session 4)

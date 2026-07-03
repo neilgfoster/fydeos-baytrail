@@ -39,10 +39,21 @@ udevadm trigger --action=add 2>/dev/null; udevadm settle --timeout=10 2>/dev/nul
 
 # eMMC enumeration is racy on USB utility boots; don't just wait — actively force
 # the eMMC SDHCI controller to re-probe (unbind/bind sdhci-acpi). Each rebind is a
-# fresh probe attempt, so retrying ~40x makes mmcblk0 appearing near-certain.
+# fresh probe attempt. NOTE: rebinding RENUMBERS the mmc host, so the eMMC may come
+# back as mmcblk1/2/... — so detect it by IDENTITY (the big ~58GiB mmcblk disk),
+# NOT by a fixed /dev/mmcblk0.
+find_emmc() {  # echo the big eMMC block device, or nothing
+  for d in /sys/block/mmcblk*; do
+    b=$(basename "$d")
+    case "$b" in *boot*|*rpmb*) continue ;; esac
+    sz=$(cat "$d/size" 2>/dev/null)   # 512-byte sectors; eMMC 58GiB ~ 122M, USB 7GiB ~ 15M
+    [ "${sz:-0}" -gt 100000000 ] && { echo "/dev/$b"; return 0; }
+  done
+  return 1
+}
 DRV=/sys/bus/platform/drivers/sdhci-acpi
-i=0
-while [ ! -b "$TARGET" ] && [ "$i" -lt 40 ]; do
+i=0; TARGET="$(find_emmc)"
+while [ -z "$TARGET" ] && [ "$i" -lt 40 ]; do
   for base in 80860F14:00 80860F14:01; do
     [ -e "/sys/bus/platform/devices/$base" ] || continue
     echo "$base" > "$DRV/unbind" 2>/dev/null
@@ -51,10 +62,11 @@ while [ ! -b "$TARGET" ] && [ "$i" -lt 40 ]; do
   udevadm trigger --action=add 2>/dev/null
   udevadm settle --timeout=5 2>/dev/null
   sleep 2; i=$((i+1))
-  say "ensure eMMC try $i: $([ -b "$TARGET" ] && echo PRESENT || echo absent)"
+  TARGET="$(find_emmc)"
+  say "ensure eMMC try $i: ${TARGET:-absent}"
 done
-[ -b "$TARGET" ] || finish "FATAL: $TARGET never appeared after $i rebind tries — power-cycle & retry" 20
-say "$TARGET present (after $i tries)"
+[ -n "$TARGET" ] || finish "FATAL: no eMMC disk after $i rebind tries — power-cycle & retry" 20
+say "eMMC = $TARGET (after $i tries)"
 
 # 1. re-enable UI on eMMC ROOT-A
 EROOTA="$(partdev "$TARGET" 3)"

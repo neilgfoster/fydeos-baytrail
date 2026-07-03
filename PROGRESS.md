@@ -332,3 +332,33 @@ USB `/sbin`, point grub `init=` at it, PID1 does the work, logs to ROOT-A trace 
 sda<->sdb** — mount fresh each time; free space by removing decompressed fw dupes.
 
 ## Next actions (session 4)
+
+**State: working tree clean, all committed. Tablet boots FydeOS from eMMC
+standalone; wifi/touch/display work; device is usable.**
+
+Build artifacts on the Crostini build host (NOT in git):
+- `~/openfyde/kernel-6.6/` — tree; `.config` = Bay Trail build #6. Rebuild:
+  `cd ~/openfyde/kernel-6.6 && make -j8 bzImage modules` (keep xloadflags 0x3f).
+  bzImage == `boards/iconia-w4-820/out/vmlinuz` (sha 6b72156f).
+- `~/openfyde/modules-baytrail.tar` (153M) — injected module set.
+- Re-inject a new build via `iconia-kernel-reinject.sh` (stage tar→USB p1,
+  vmlinuz→USB ESP). depmod runs ON-DEVICE (build-host depmod can't read .ko.gz).
+
+Pick a target:
+1. **Backlight (hard)** — find which PMIC/PWM the DSI panel uses. Diag: `dmesg |
+   grep -iE 'pmic|crystal|axp|int33fd|pwm|backlight'`, `ls /sys/class/pwm`,
+   `ls /sys/bus/i2c/devices`. Crystal Cove does NOT bind → AXP288? LPSS PWM? panel
+   GPIO? May need i915/DSDT quirk. Screen usable at 100% meanwhile.
+2. **Audio** — rootfs uses `snd_sof`; likely need `intel/sof/sof-byt*.ri` +
+   `intel/sof-tplg/*.tplg` + ALSA UCM; blacklist legacy `intel_sst` so they don't
+   contend (or vice versa). Firmware loads from .xz natively now.
+3. **Drop HS200 quirk?** eMMC booted first-try on Bay Trail kernel — try removing
+   `sdhci.debug_quirks2=0x40` from eMMC grub over several cold boots.
+4. **Bluetooth** — no hci0; needs `hci_uart`/serdev bind + `BCM-0bb4-0306.hcd`.
+5. **Sensors/auto-rotate** — accel (`SMO91D0`/`kxcjk`) didn't enumerate.
+
+Utility-boot how-to: deploy `install/iconia-*.sh` to USB `/sbin`, `sed` grub
+`init=` to it, boot USB, read ROOT-A trace. USB ROOT-A ~full & re-enumerates
+sda<->sdb — mount FRESH each command; free space by deleting decompressed
+`/lib/firmware/**` dupes (kernel loads .xz natively now). eMMC PARTUUID
+95DE10DD-E5AA-0C49-8E23-A32012F41F14.

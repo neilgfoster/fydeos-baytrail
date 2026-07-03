@@ -35,10 +35,26 @@ partdev() { case "$1" in *[0-9]) echo "$1p$2";; *) echo "$1$2";; esac; }
 n=0; while [ "$n" -lt 6 ]; do echo "" > "$CON"; echo "#### ICONIA eMMC FINALIZE (enable UI) ####" > "$CON"; n=$((n+1)); done
 say "=== iconia-emmc-finalize.sh PID $$ ==="
 mkdir -p /run/udev; udevd --daemon 2>/dev/null || /lib/systemd/systemd-udevd --daemon 2>/dev/null
-udevadm trigger --action=add 2>/dev/null; udevadm settle --timeout=30 2>/dev/null
-w=0; while [ ! -b "$TARGET" ] && [ "$w" -lt 60 ]; do say "waiting for $TARGET ${w}s"; sleep 3; w=$((w+3)); done
-[ -b "$TARGET" ] || finish "FATAL: $TARGET never appeared — power-cycle & retry" 20
-say "$TARGET present"
+udevadm trigger --action=add 2>/dev/null; udevadm settle --timeout=10 2>/dev/null
+
+# eMMC enumeration is racy on USB utility boots; don't just wait — actively force
+# the eMMC SDHCI controller to re-probe (unbind/bind sdhci-acpi). Each rebind is a
+# fresh probe attempt, so retrying ~40x makes mmcblk0 appearing near-certain.
+DRV=/sys/bus/platform/drivers/sdhci-acpi
+i=0
+while [ ! -b "$TARGET" ] && [ "$i" -lt 40 ]; do
+  for base in 80860F14:00 80860F14:01; do
+    [ -e "/sys/bus/platform/devices/$base" ] || continue
+    echo "$base" > "$DRV/unbind" 2>/dev/null
+    echo "$base" > "$DRV/bind"   2>/dev/null
+  done
+  udevadm trigger --action=add 2>/dev/null
+  udevadm settle --timeout=5 2>/dev/null
+  sleep 2; i=$((i+1))
+  say "ensure eMMC try $i: $([ -b "$TARGET" ] && echo PRESENT || echo absent)"
+done
+[ -b "$TARGET" ] || finish "FATAL: $TARGET never appeared after $i rebind tries — power-cycle & retry" 20
+say "$TARGET present (after $i tries)"
 
 # 1. re-enable UI on eMMC ROOT-A
 EROOTA="$(partdev "$TARGET" 3)"

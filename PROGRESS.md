@@ -384,18 +384,37 @@ accel with `location`/`label=accel-display` + an identity mount-matrix so
 iioservice exposes it to Chrome. The `armsensor` toggle can DISARM (restore
 init=/sbin/init) by re-running it.
 
-## 🟡 AUDIO: kernel DONE, blocked on routing/UCM (session 4, 2026-07-03)
+## ✅ AUDIO FIXED (session 4, 2026-07-03) — speaker works, survives reboot
 
-Codec = **Realtek RT5640** (i2c `10EC5640`). trim.config had dropped both
-`SND_SOC_RT5640` and `SND_SOC_INTEL_BYTCR_RT5640_MACH`, so no card was created.
-Enabled both → kernel **6.6.76 #10** (reinjected to eMMC). CRAS now shows volume
-sliders and a card exists, BUT **no sound out** (ChromeVox silent; brute-unmute +
-`speaker-test` on every card via `iconia-audio-diag.sh` produced nothing audible).
-Rootfs HAS `fw_sst_0f28.bin.xz` AND `sof-byt.ri`+`sof-byt-rt5640.tplg`, and
-`aplay/amixer/speaker-test/cras`, but **UCM only ships `sof-hda-dsp`** (nothing for
-our card) → CRAS can't route it. Next: identify which DSP/card loaded (SST vs SOF)
-and supply a matching UCM (+ maybe force legacy SST via
-`snd_intel_dspcfg.dsp_driver=1`). Best done live once SSH/shell debugging is up.
+Codec = **Realtek RT5640** (i2c `10EC5640`); DSP = **legacy SST atom** (card 0
+`bytcr-rt5640`, config `stereo-spk-dmic1-mic`; SOF also present but SST won). Two
+parts:
+1. **Kernel**: trim.config had dropped `SND_SOC_RT5640` + `SND_SOC_INTEL_BYTCR_RT5640_MACH`
+   → no card. Enabled both → kernel **6.6.76 #10** (in `baytrail-hw.config`).
+2. **UCM (the real blocker)**: FydeOS ships UCM only for `sof-hda-dsp`, nothing for
+   our card, so CRAS couldn't route it (raw `aplay hw:0,0` failed hw_params = DPCM
+   FE had no connected BE). Fix: a **self-contained `bytcr-rt5640` UCM** built from
+   alsa-ucm-conf's verified sequences (bytcr PlatformEnableSeq DSP pipe +
+   rt5640 EnableSeq codec routing in SectionVerb; Speaker enable in the device;
+   volume mapped to `Speaker Playback Volume`/`DAC1`). Proven live: manual amixer
+   sequence → white noise → YouTube; then installed UCM → **sound survives cold
+   reboot**. On-screen volume works.
+
+Repo artifacts: `boards/iconia-w4-820/audio/{HiFi.conf,bytcr-rt5640.conf}` +
+`install/iconia-ucm-install.sh` (remounts rootfs rw, drops UCM into
+`/usr/share/alsa/ucm2/conf.d/bytcr-rt5640/`, symlinks `bytcrrt5640`, restarts cras).
+NOTE: UCM was installed to the live eMMC rootfs at runtime — bake it into the rootfs
+image for a clean reproducible build. Diag: `install/iconia-audio-diag.sh`.
+
+### 🔑 SSH LIVE-DEBUG WORKS (session 4) — huge workflow unlock
+Root shell on tablet over wifi ended the multi-boot loop. What finally worked:
+FydeOS `sshd_config` wants host keys at `/mnt/stateful_partition/etc/ssh/` (copied
+ours there); then run sshd manually (NOT persistent yet). Connect from the **crosh
+host** (Crostini can't reach LAN): `ssh -i /tmp/ik root@192.168.1.31` (key =
+build-host `~/.ssh/iconia_ed25519`, copied to crosh `/tmp/ik`). Push local scripts:
+`ssh ... 'sh -s' < /media/fuse/<crostini>/<file>`. `stop powerd` first (suspend/
+resume broken — screen won't wake). TODO: make sshd auto-start at boot (privsep
+preauth-255 with our own invocation is unsolved; manual start works).
 
 ## 🔧 SSH-for-live-debug (in progress, session 4) — the current focus
 

@@ -62,7 +62,7 @@ cat > "$R/etc/init/iconia-sshd.conf" <<'EOF'
 # Iconia debug SSH (key-only root login). boot-services is an early, reliable
 # ChromeOS milestone; sshd binds even before wifi is up. Opens the inbound
 # firewall (ChromeOS drops inbound by default) then runs sshd with -o overrides.
-start on started boot-services
+start on started boot-services or started system-services or started shill
 respawn
 respawn limit 20 120
 pre-start script
@@ -80,6 +80,31 @@ exec /usr/sbin/sshd -D \
   -o PidFile=/run/sshd.pid
 EOF
 say "upstart job /etc/init/iconia-sshd.conf written"
+sync
+
+# --- DEBUG: validate the exact sshd invocation against the eMMC rootfs offline,
+#     so we learn WHY it doesn't listen without needing to log into the tablet ---
+{
+  echo "===== sshd -t (config test, chroot eMMC) ====="
+  mount --bind /dev  "$R/dev"  2>/dev/null
+  mount -t proc proc "$R/proc" 2>/dev/null
+  chroot "$R" /usr/sbin/sshd -t \
+    -o UsePAM=no -o PermitRootLogin=prohibit-password -o PasswordAuthentication=no \
+    -o AuthorizedKeysFile=/root/.ssh/authorized_keys 2>&1
+  echo "sshd -t rc=$?"
+  echo "===== effective config (sshd -T) — key lines ====="
+  chroot "$R" /usr/sbin/sshd -T \
+    -o UsePAM=no -o PermitRootLogin=prohibit-password \
+    -o AuthorizedKeysFile=/root/.ssh/authorized_keys 2>&1 \
+    | grep -iE 'hostkey|permitrootlogin|pubkeyauth|authorizedkeysfile|^port|listenaddress|usepam'
+  echo "===== stock sshd_config (non-comment) ====="
+  grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$R/etc/ssh/sshd_config" 2>/dev/null
+  echo "===== sshd_config.d ====="
+  ls -l "$R/etc/ssh/sshd_config.d/" 2>/dev/null
+  echo "===== host key perms ====="
+  ls -l "$R/etc/ssh/"ssh_host_*_key 2>/dev/null
+  umount "$R/proc" 2>/dev/null; umount "$R/dev" 2>/dev/null
+} >> "$TRACE" 2>&1
 sync
 umount "$EROOTA_MNT" 2>/dev/null
 finish "=== SSH SETUP DONE — boot eMMC, join wifi at OOBE (touch), then SSH root@<tablet-ip> ===" 12

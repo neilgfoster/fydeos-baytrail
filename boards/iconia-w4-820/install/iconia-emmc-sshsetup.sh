@@ -35,10 +35,21 @@ done
 [ -n "$TARGET" ] || finish "FATAL: no eMMC after $i tries — power-cycle & retry" 20
 say "eMMC = $TARGET"
 
-EROOTA="$(partdev "$TARGET" 3)"; mkdir -p "$EROOTA_MNT"
+EROOTA="$(partdev "$TARGET" 3)"; EESP="$(partdev "$TARGET" 12)"; mkdir -p "$EROOTA_MNT" /mnt/e-esp
 mount "$EROOTA" "$EROOTA_MNT" 2>/dev/null || finish "FATAL: cannot mount eMMC ROOT-A $EROOTA" 20
 mount -o remount,rw "$EROOTA_MNT" 2>/dev/null
 R="$EROOTA_MNT"
+
+# --- add cros_debug to the eMMC grub cmdline so crosh 'shell' + VT2 login work ---
+if mount "$EESP" /mnt/e-esp 2>/dev/null; then
+  if ! grep -q 'cros_debug' /mnt/e-esp/boot/grub/grub.cfg 2>/dev/null; then
+    sed -i 's/\bcros_efi\b/cros_efi cros_debug/' /mnt/e-esp/boot/grub/grub.cfg 2>>"$TRACE"
+    say "added cros_debug to eMMC grub"
+  else
+    say "cros_debug already in eMMC grub"
+  fi
+  sync; umount /mnt/e-esp 2>/dev/null
+fi
 
 # --- host keys (pre-generate; rootfs is ro at runtime) ---
 mkdir -p "$R/etc/ssh"

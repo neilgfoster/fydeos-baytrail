@@ -45,7 +45,7 @@ Full reasoning: [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findin
 | 6 | Build kernel with EFI_MIXED; verify handover bit | ✅ done — **`xloadflags=0x3f`** (6.6.76, trimmed) |
 | 7 | Inject to USB; boot tablet past the freeze | ✅ **DONE** — kernel boots to userspace (init=/bin/sh) |
 | 7b | FydeOS userspace boots (real init) | ✅ **DONE** — boots to OOBE, touchscreen works! |
-| 8 | Install to eMMC; re-inject kernel+modules to eMMC; standalone boot | 🟡 eMMC INSTALLED + boots our GRUB; eMMC enumeration intermittent (see session 2) |
+| 8 | Install to eMMC; re-inject kernel+modules to eMMC; standalone boot | ✅ DONE — eMMC boots FydeOS to OOBE standalone (USB removed) |
 
 ## Open questions / unknowns to resolve
 
@@ -244,13 +244,35 @@ sync; sudo umount /tmp/esp; sudo umount /tmp/roota
   (`/iconia-*.log`) — the ONLY reliable channel (USB-ESP FAT logs / dmesg / stateful
   are lost on the hard power-offs these debug boots need).
 
-## Next actions (session 2 cont. / session 3)
-0. **Make eMMC boot reliable** (blocks a daily-usable device):
-   a. Deploy `iconia-emmc-debug.sh` (init=), boot USB once (applies HS200-off +
-      debug console to eMMC grub), remove USB, boot eMMC, power-cycle a few times.
-      If it now boots every time → quirk fixed it; revert console for production.
-   b. If not: kernel rebuild with Bay Trail I2C/PMIC/regulator (see build recipe in
-      the standalone-kernel notes above). Then re-inject kernel+modules to eMMC.
+## ✅ MILESTONE 8 COMPLETE — eMMC boots standalone to OOBE (2026-07-03)
+
+Full keyboard-free eMMC install achieved. Recap of what made it work:
+- **Install**: `iconia-init.sh` as PID 1 (init=) — coldplug udev, chromeos-install,
+  re-inject 0x3f kernel + bootia32.efi + grub.cfg (eMMC PARTUUID) + bootmgfw.efi.
+- **Bootable**: bootmgfw trick (GRUB at `\EFI\Microsoft\Boot\bootmgfw.efi`).
+- **Reliable eMMC**: `sdhci.debug_quirks2=0x40` (HS200 off) in grub, AND for USB
+  utility boots, `iconia-emmc-finalize.sh` force-rebinds sdhci-acpi to make the
+  eMMC enumerate. KEY GOTCHA: rebinding RENUMBERS mmc hosts (eMMC may become
+  mmcblk1), so detect the eMMC by identity (big ~58GiB mmcblk), not fixed mmcblk0.
+- **OOBE**: had to re-enable `ui.conf` on eMMC ROOT-A (we'd disabled it on the USB
+  rootfs for PID1 console debugging; chromeos-install copied that to eMMC).
+- **Prod grub keeps the boot console** (console=tty1 loglevel=7, no keep_bootcon) —
+  user wants visible boot activity, not a blank/frozen screen.
+
+eMMC ROOT-A PARTUUID = `95DE10DD-E5AA-0C49-8E23-A32012F41F14`.
+
+## Next actions (session 3)
+1. **Confirm eMMC boot reliability** across several cold power-cycles (first boot
+   to OOBE worked; verify it's consistent). If any boot still hangs at rootwait,
+   the durable fix is the kernel rebuild (Bay Trail I2C/PMIC — see below).
+2. **Hardware follow-ups** (now on a stable eMMC base) — see `hardware-status.md`:
+   Wi-Fi (brcmfmac + firmware/NVRAM), audio (fw_sst_0f28.bin + UCM), backlight,
+   auto-rotate/sensors, bluetooth. WiFi is needed to complete OOBE sign-in.
+3. **Optional kernel rebuild** enabling `CONFIG_I2C_DESIGNWARE_BAYTRAIL` + AXP288
+   PMIC/regulator/OPREGION (relax trim) — would make eMMC/I2C rock-solid and fix
+   several HW subsystems at once. Then re-inject kernel+modules to eMMC.
+4. **Disable auto-update** on the installed system (would overwrite our eMMC kernel
+   with stock 0x2b).
 
 
 1. Confirm the i915 flicker fix (grub `boots-2026-07-02` release `grub.cfg` /

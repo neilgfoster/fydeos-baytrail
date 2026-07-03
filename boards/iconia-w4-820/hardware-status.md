@@ -18,13 +18,13 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 |-----------|--------|---------------------------|--------------|-------|
 | Boot (EFI handover) | ✅ works | `CONFIG_EFI_MIXED` + handover proto | **kernel** | xloadflags 0x3f; boots to OOBE. |
 | Display / KMS | ✅ works | `i915` (Gen7 Valleyview) | kernel cfg + **cmdline** | Flicker FIXED via `i915.enable_psr=0 enable_fbc=0 enable_dc=0` (confirmed session 2). Smooth. |
-| Backlight / brightness | ❌ broken | `intel_backlight` / ACPI | kernel + **cmdline** | Brightness control does nothing at OOBE (session 2). Try `acpi_backlight=native|vendor`, `i915.enable_dpcd_backlight=1`. |
+| Backlight / brightness | ❌ broken | i915 + **PMIC PWM (crc_pwm)** | **kernel (PMIC)** | Session 3: no /sys/class/backlight; `i915 … Failed to get the PMIC PWM chip`. Backlight PWM is on the Crystal Cove PMIC we DON'T compile in → needs the PMIC/PWM kernel rebuild. |
 | Panel rotation | ❌ broken | `i915` `fbcon=rotate:` + userspace | cmdline + userspace | No auto-rotate at OOBE (session 2). Accel/IIO likely not up. Panel may be natively portrait. |
 | Wi-Fi | ✅ works | `brcmfmac` SDIO, **BCM43241** (SDIO 02D0:4324) | rootfs (depmod+fw+nvram) | FIXED session 3: `depmod` (modules.dep had 0 brcmfmac — stale index blocked ALL module autoload) + decompress `brcmfmac43241b4-sdio.bin` (.xz unloadable, FW_LOADER_COMPRESS off) + NVRAM `brcmfmac43241b4-sdio.Acer-Iconia W4-820P.txt` (from VALLEYVIEW C0). Visible + connected. |
-| Bluetooth | untested | `btbcm` / `hci_uart` | kernel + firmware | Paired with the Wi-Fi combo chip. |
-| Audio | ❌ broken | `intel_sst` `bytcr_rt5640` | kernel + **firmware (rootfs)** | No sound at OOBE (session 2). `fw_sst_0f28.bin` failed to load (-2); No soundcards found. Needs firmware + UCM. |
+| Bluetooth | 🟡 partial | `btbcm` + `hci_uart`/serdev | kernel + firmware | Session 3: `bluetooth`+`btbcm` load, core inits, but NO hci0 — UART BT controller not instantiated. Needs serdev/`hci_uart` bind + `BCM-0bb4-0306.hcd` (present, .xz). Combo w/ BCM4324. |
+| Audio | ❌ broken | contended: `intel_sst_acpi` vs `snd_sof` | kernel + **firmware+topology+UCM** | Session 3: BOTH legacy SST and SOF drivers load, neither gets firmware → no card. `fw_sst_0f28.bin` -2; SOF needs `sof-byt*.ri`+`.tplg`. Pick ONE stack, provide its fw/topology + ALSA UCM. Classic Bay Trail mess. |
 | Touchscreen | ✅ works | I2C-HID (SYNA7300 / hid-multitouch) | kernel | Works out of the box at OOBE. |
-| Accelerometer / sensors | ❌ broken | IIO (`kxcjk-1013` etc.) | kernel | No auto-rotate (session 2) → sensors likely absent. Check `dmesg`/`/sys/bus/iio`. |
+| Accelerometer / sensors | ❌ broken | IIO (`kxcjk-1013`) / `SMO91D0` hub | kernel | Session 3: no IIO devices; `i2c-SMO91D0:00 can't add hid device -5`. Accel likely behind sensor hub / i2c_designware issue. |
 | eMMC | works (installer) | `sdhci-acpi` | kernel | Installer already reads/writes it. |
 | microSD | untested | `sdhci-acpi` | kernel | |
 | USB (OTG) | partial | `dwc3` / xhci | kernel | OTG adapter used to attach the installer USB. OTG keyboard input DEAD → no tablet terminal. |

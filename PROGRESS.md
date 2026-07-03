@@ -369,9 +369,20 @@ non-booted rootfs, so the test must run on the eMMC): `hid-sensor-hub` binds
 SMO91D0 and all six iio devices appear incl. `iio:device3 name=accel_3d` and
 `dev_rotation`. **So the kernel side is complete; remaining no-rotate is FydeOS
 userspace** (iioservice/mems_setup: the HID accel likely lacks a `location=lid`
-tag / mount-matrix wiring Chrome needs). Needs dev-mode/crosh shell to inspect —
-NOT yet done. Kernel diag artifacts: `install/iconia-sensor-diag.sh`,
-`iconia-sensor-load.sh` (LoadPin-blocked), `iconia-emmc-sensor-check.sh`.
+tag / mount-matrix wiring Chrome needs). Kernel diag artifacts:
+`install/iconia-sensor-diag.sh`, `iconia-sensor-load.sh` (LoadPin-blocked),
+`iconia-emmc-sensor-check.sh`.
+
+**Force-load experiment RULED OUT module-timing (2026-07-03):** `iconia-sensor-
+boot.sh` (PID1 pre-init that modprobes the whole HID-sensor stack, then
+`exec /sbin/init`) armed via `iconia-emmc-armsensor.sh`. Booted to OOBE with
+accel_3d loaded before init → **still no rotation**. So it is NOT a load/timing
+issue; it is FydeOS iioservice/Chrome not adopting the HID accel as the lid
+rotation sensor. Next attempt (needs dev-mode/crosh shell): inspect
+`/run/iioservice`, `mems_setup`, udev `*iioservice*` rules; likely need to tag the
+accel with `location`/`label=accel-display` + an identity mount-matrix so
+iioservice exposes it to Chrome. The `armsensor` toggle can DISARM (restore
+init=/sbin/init) by re-running it.
 
 ## Next actions (session 4)
 

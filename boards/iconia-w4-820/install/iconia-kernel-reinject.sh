@@ -57,7 +57,26 @@ EROOTA="$(partdev "$TARGET" 3)"
 mount "$EROOTA" "$EROOTA_MNT" 2>/dev/null || finish "FATAL: cannot mount eMMC ROOT-A $EROOTA" 20
 say "replacing /lib/modules/$KV on eMMC ..."
 rm -rf "$EROOTA_MNT/lib/modules/$KV"
-tar xf "$USTATE_MNT/$TAR" -C "$EROOTA_MNT" 2>>"$TRACE" || finish "FATAL: tar extract failed" 20
+# Reclaim space: the rootfs ships BOTH decompressed firmware and .xz copies, and
+# the kernel now loads .xz natively (FW_LOADER_COMPRESS_XZ) — so any file with an
+# .xz sibling is a removable dupe. i915-as-a-module grew the tar (~+46M) and
+# overran eMMC ROOT-A; this frees far more than that. (2026-07-03)
+say "free before reclaim: $(df -h "$EROOTA_MNT" 2>/dev/null | awk 'END{print $4}')"
+# (a) decompressed firmware that has an .xz sibling = removable dupe
+find "$EROOTA_MNT/lib/firmware" -type f ! -name '*.xz' 2>/dev/null | while read -r f; do [ -f "$f.xz" ] && rm -f "$f"; done
+# (b) firmware for hardware this Bay Trail tablet does NOT have (Intel gfx +
+#     Broadcom wifi only). Frees hundreds of MB so the i915-as-module tree fits.
+#     KEEP: i915, brcm (wifi), regulatory.db, intel SST/SOF (audio), edid.
+for d in amdgpu radeon amd nvidia nvidiagpu mrvl ath10k ath11k ath12k ath6k \
+         mediatek mrvlprestera qed qcom qca rtlwifi rtw88 rtw89 rtl_bt libertas \
+         iwlwifi ti-connectivity cypress cxgb4 netronome liquidio dpaa2 \
+         bnx2x bnx2 cavium myricom emi62 emi26 korg keyspan dabusb ttusb-budget \
+         cpia2 av7110 vpu powervr qat_* imx; do
+  rm -rf "$EROOTA_MNT/lib/firmware/$d"
+done
+sync
+say "free after reclaim:  $(df -h "$EROOTA_MNT" 2>/dev/null | awk 'END{print $4}')"
+tar xf "$USTATE_MNT/$TAR" -C "$EROOTA_MNT" 2>>"$TRACE" || finish "FATAL: tar extract failed (still out of space?)" 20
 say "depmod $KV on-device ..."
 depmod -b "$EROOTA_MNT" "$KV" 2>>"$TRACE"
 DEPC=$(grep -c brcmfmac "$EROOTA_MNT/lib/modules/$KV/modules.dep" 2>/dev/null)

@@ -331,10 +331,42 @@ USB `/sbin`, point grub `init=` at it, PID1 does the work, logs to ROOT-A trace 
 (rebind RENUMBERS mmc → find big mmcblk). **USB ROOT-A is ~100% full & re-enumerates
 sda<->sdb** — mount fresh each time; free space by removing decompressed fw dupes.
 
+## ✅ BACKLIGHT FIXED (session 4, 2026-07-03)
+
+**Brightness slider works.** Root cause was a two-part kernel gap, found via
+`iconia-backlight-diag.sh` (raw-PWM dim test confirmed the HW path):
+1. `# CONFIG_GPIO_CRYSTAL_COVE is not set` — the `gpio_crystalcove` GPIO chip
+   i915's DSI/VBT panel code needs to "own" the panel never registered. Fixed:
+   `CONFIG_GPIO_CRYSTAL_COVE=y` (in `baytrail-hw.config`). PWM_CRC/INTEL_SOC_PMIC
+   were already on — that's why raw `pwmchip0` (crystal_cove_pwm) dimmed the panel.
+2. **Probe-ordering race**: even with the GPIO chip enabled, built-in i915 probes
+   (~17.7s) BEFORE the Crystal Cove MFD/GPIO (on the async i2c-designware bus)
+   registers `gpio_crystalcove` (~18.1s) → i915 logs "cannot find GPIO chip
+   gpio_crystalcove, deferring" → "Failed to own gpio for panel control" → "Failed
+   to get the PMIC PWM chip" and never retries. Fix: **`CONFIG_DRM_I915=m`** — i915
+   loads from userspace AFTER the PMIC/GPIO are up. (This is also how ChromeOS ships
+   i915 natively; building it in was our deviation.) Kernel = **6.6.76 #8**,
+   xloadflags still 0x3f.
+
+**Space gotcha (important for any future reinject):** i915-as-a-module grew the
+module tar 153M→**201M**, which OVERRAN eMMC ROOT-A (only ~159M free). `iconia-
+kernel-reinject.sh` now reclaims space before extract: (a) drop decompressed
+firmware that has an `.xz` sibling, (b) `rm -rf` firmware for hardware this tablet
+lacks (amdgpu/radeon/nvidia/iwlwifi/ath*/rtw*/mediatek/qcom/… — KEEP i915, brcm,
+intel audio, regulatory.db). A FAILED reinject leaves a partial module tree (rm ran
++ extract died) → device bootloops (last console line "bootconsole disabled"); the
+cure is simply a successful reinject.
+
 ## Next actions (session 4)
 
-**State: working tree clean, all committed. Tablet boots FydeOS from eMMC
-standalone; wifi/touch/display work; device is usable.**
+**State: BACKLIGHT DONE. Tablet boots FydeOS from eMMC standalone; wifi/touch/
+display/brightness all work. Kernel 6.6.76 #8 (i915=m). Working tree: config +
+reinject-script changes committed.**
+
+Build artifacts on the Crostini build host (NOT in git): `~/openfyde/kernel-6.6/`
+(.config = #8, i915=m), `~/openfyde/modules-baytrail.tar` (201M, i915=m set),
+`boards/iconia-w4-820/out/vmlinuz` (#8). Reinject via `iconia-kernel-reinject.sh`
+(tar→USB p1, vmlinuz→USB ESP p12; depmod runs on-device).
 
 Build artifacts on the Crostini build host (NOT in git):
 - `~/openfyde/kernel-6.6/` — tree; `.config` = Bay Trail build #6. Rebuild:
@@ -345,10 +377,7 @@ Build artifacts on the Crostini build host (NOT in git):
   vmlinuz→USB ESP). depmod runs ON-DEVICE (build-host depmod can't read .ko.gz).
 
 Pick a target:
-1. **Backlight (hard)** — find which PMIC/PWM the DSI panel uses. Diag: `dmesg |
-   grep -iE 'pmic|crystal|axp|int33fd|pwm|backlight'`, `ls /sys/class/pwm`,
-   `ls /sys/bus/i2c/devices`. Crystal Cove does NOT bind → AXP288? LPSS PWM? panel
-   GPIO? May need i915/DSDT quirk. Screen usable at 100% meanwhile.
+1. ✅ **Backlight — DONE** (see section above: GPIO_CRYSTAL_COVE=y + DRM_I915=m).
 2. **Audio** — rootfs uses `snd_sof`; likely need `intel/sof/sof-byt*.ri` +
    `intel/sof-tplg/*.tplg` + ALSA UCM; blacklist legacy `intel_sst` so they don't
    contend (or vice versa). Firmware loads from .xz natively now.

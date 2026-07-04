@@ -4,6 +4,17 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## ⚠ REPRODUCIBILITY STATUS (goal: wipe → USB → working Iconia)
+
+**NOT yet achievable.** Every fix exists in the repo, but almost all are applied LIVE
+over SSH — `boards/iconia-w4-820/stage/` (what `inject-rootfs.sh` bakes) is EMPTY, and
+no install/finalize script wires in chrome_dev.conf / powertune / memtune / als-
+brightness / wifi-fix / sshsetup. `iconia-emmc-finalize.sh` only re-enables UI + tidies
+grub. This is the deferred "finalization" work. Recipe to close it (which fix goes to
+rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/fw steps)
+is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
+etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
+
 ## Session 7 (2026-07-05) — MEMORY OPTIMIZATION (2 GB device)
 
 **Goal: run lean on 2 GB. Chrome is the whole story (~25 renderers); ARC not running.**

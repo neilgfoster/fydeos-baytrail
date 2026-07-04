@@ -4,6 +4,39 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## Session 6 (2026-07-05) — POWER OPTIMIZATION (largely done)
+
+**Outcome: the device already sips power; the meaningful, UX-safe wins are banked.**
+
+- **Meter reality (important for next time):** battery ACPI gauge is **1%-quantized and
+  freezes at 100%** → useless for fast A/B. Use **RAPL** `/sys/class/powercap/intel-rapl:0/energy_uj`
+  for SoC-side A/B (fast, precise); battery %/time only for the screen (slow). Scripts:
+  `install/iconia-pwr-rapl.sh` (SoC), `iconia-pwr-sample.sh`/`iconia-batlog.sh` (battery),
+  `iconia-pwr-survey.sh` (inventory).
+- **Baseline:** SoC `package-0` ≈ **0.30 W idle**, parked in **C7S** (deepest C-states
+  already optimal — Bay Trail C6 bug not biting), governor **schedutil**. So CPU-side
+  headroom is basically nil; the screen is the only big lever.
+- ✅ **Adaptive brightness (the real win):** ALS is live + powerd-tagged; enabling
+  `has_ambient_light_sensor=1` + `internal_backlight_als_steps` curve (in
+  `/var/lib/power_manager`, stateful/persistent) turned fixed 63–100% into ambient-
+  adaptive (~7/100 indoor). `install/iconia-als-brightness-install.sh` (revert arg).
+  NOTE pref name is `internal_backlight_als_steps` (not `..._ambient_light_steps`).
+  iioservice DOES broker the ALS to powerd here (unlike parked auto-rotate).
+- ✅ **`disable_idle_suspend=1`** (`install/iconia-powertune.sh`, upstart-persistent):
+  s2idle resume is broken (screen won't wake), and powerd would idle-suspend at 6m30s
+  on battery → hang. Now screen-offs on idle (saving) but never suspends.
+- **Charging icon / battery cap = firmware-limited.** PMIC is **Crystal Cove
+  (INT33FD), not AXP288** — no mainline Crystal Cove charger driver; ACPI `ADP1/online`
+  frozen 0 even while charging. Tried the AXP288 charger/fuel-gauge/extcon modules
+  (built + hot-loaded) — wrong chip, bind to nothing. Parked. (charging *works*, only
+  the bolt/status reporting is broken.)
+- **Trims that were noise (power) but done anyway:** eMMC I/O sched already `none`;
+  unloading dead motion sensors = within noise; stopping unused services
+  (camera/cupsd/modemmanager/fwupd/p2p/avahi/update-engine) = ~**26 MB RAM** freed
+  (a memory-backlog win, not power) — folded into `iconia-powertune.sh`.
+- **Backburner:** rigorous brightness→mA sweep (needs ~1 h idle; battery gauge is slow).
+- **Aside captured:** make shutdown fade to black not white (memory note).
+
 ## Goal
 
 A repeatable process to boot & install FydeOS/openFyde on an **Acer Iconia W4-820**

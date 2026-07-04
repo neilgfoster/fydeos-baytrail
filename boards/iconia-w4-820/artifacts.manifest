@@ -1,0 +1,45 @@
+# artifacts.manifest — Acer Iconia W4-820
+#
+# Maps a detected target device to a cached build stored in GitHub Releases.
+# Consumed by scripts/resolve-artifacts.sh (cache lookup) and
+# scripts/publish-artifacts.sh (cache fill). See docs/artifact-cache.md.
+#
+# The whole point: heavy, build-expensive artifacts (kernel + modules, ~15 min /
+# ~210 MB) are NEVER in git — they live in a GitHub Release keyed by a tag that
+# encodes the kernel version + a fingerprint of the config fragments/patches/
+# sources. Change any of those inputs -> new fingerprint -> new tag -> forced
+# rebuild. Match -> download the bundle and inject. This is the backbone of the
+# "inspect USB -> prepare -> install" flow.
+
+# --- Match rule: which stock installer USB this build serves. Compared (glob)
+#     against inspect-usb.sh's KVER_A in usb-profile.env. ---
+MATCH_STOCK_KERNEL="6.6.99-fyde-*"
+
+# --- The build we inject. UTS release of our kernel (used to place modules and
+#     to sanity-check a downloaded bundle). ---
+BUILD_KERNEL_UTS="6.6.76-gabcfb16364e1"
+
+# --- Release tag base. resolve-artifacts.sh appends "-<config-fingerprint[:12]>"
+#     so the effective tag is e.g. iconia-w4-820/6.6.76-baytrail-ab12cd34ef56 ---
+BUILD_TAG_BASE="iconia-w4-820/6.6.76-baytrail"
+
+# --- Fingerprint inputs (relative to repo root). Any change here mints a new tag
+#     and forces a rebuild. Globs expanded by resolve-artifacts.sh. ---
+FINGERPRINT_INPUTS="
+config/efi-mixed.config
+boards/iconia-w4-820/config/*.config
+boards/iconia-w4-820/patches/*.patch
+boards/iconia-w4-820/install/*.c
+"
+
+# --- Release-bundle members: the build outputs uploaded as release assets. Each
+#     line is 'ASSET_NAME  LOCAL_BUILD_PATH' (path on the build host, may be
+#     glob/absolute). Their sha256s are recorded in the published bundle.sha256
+#     and re-verified on download. Small install-time config (grub.cfg template,
+#     UCM, chrome_dev.conf flags, *.sh) stays in the REPO, not the bundle. ---
+BUNDLE_ASSETS="
+vmlinuz             boards/iconia-w4-820/out/vmlinuz
+modules.tar         ~/openfyde/modules-baytrail.tar
+iconia-buttond      boards/iconia-w4-820/install/iconia-buttond
+bootia32.efi        boards/iconia-w4-820/out/bootia32.efi
+"

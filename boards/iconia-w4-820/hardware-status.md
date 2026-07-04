@@ -29,6 +29,8 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 | microSD | untested | `sdhci-acpi` | kernel | |
 | USB (OTG) | partial | `dwc3` / xhci | kernel | OTG adapter used to attach the installer USB. OTG keyboard input DEAD → no tablet terminal. |
 | Battery / charging | partial | `axp288` PMIC + fuel gauge | kernel | Reports 100% at OOBE (session 2) — fuel gauge reads. Charging behaviour untested. |
+| Hardware buttons | ✅ works | `soc_button_array` (ACPI PNP0C40) | kernel | Session 5: `CONFIG_INPUT_SOC_BUTTON_ARRAY=m` (+ `INTEL_INT0002_VGPIO=y` for power-wake). Power/volume auto-adopted by ChromeOS; Windows/home = `KEY_LEFTMETA` (code 125). Driver names its nodes `gpio-keys` (x2) — match buttons by capability, not name. **Long-press Windows→crosh** via `install/iconia-buttond.c` (uinput injects Ctrl+Alt+T on ≥2s hold+release). |
+| On-screen keyboard | ✅ works | ChromeOS virtual keyboard | rootfs (chrome_dev.conf) | Session 5: forced on with `--enable-virtual-keyboard` in `/etc/chrome_dev.conf` (tablet mode auto-hides it otherwise). Also lets a uinput keyboard coexist without suppressing the OSK. |
 | Suspend (S0ix/S3) | untested | PM / ACPI | **firmware-limited** | Often half-broken on Bay Trail; may not be fixable. |
 | Cameras | untested | atomisp / uvc | kernel + firmware | atomisp is notoriously painful; may be a write-off. |
 

@@ -518,6 +518,71 @@ wifi, touch, display, brightness, AUDIO, tablet-mode + portrait all work.**
 4. **Auto-rotate** revisit only with iioservice debug logging or a Chrome/ash
    angle — it's the closed layer; low ROI.
 
+## ✅ SESSION 5 (2026-07-04) — hardware buttons + OSK + long-press crosh
+
+Three things landed, all live-debugged over SSH.
+
+### ✅ Hardware buttons (power / volume ± / Windows-home)
+- Root cause: `trim.config` had `# CONFIG_INPUT_SOC_BUTTON_ARRAY is not set`, so the
+  ACPI "Windows button array" (PNP0C40) had no driver → no button input at all.
+- Fix in `config/baytrail-hw.config`: `CONFIG_INPUT_SOC_BUTTON_ARRAY=m` (+
+  `CONFIG_INTEL_INT0002_VGPIO=y` for power-button wake-from-S0ix; the vGPIO part
+  is built-in, so it only takes effect after a full bzImage reinject — the buttons
+  themselves work from the module alone).
+- Deployed as a single hot-pushed module (no reflash): `soc_button_array.ko`
+  (vermagic `6.6.76-gabcfb16364e1`, clean) → `/lib/modules/.../kernel/drivers/input/misc/`
+  + `depmod`. LoadPin blocks `insmod` from `/tmp`; must live on the pinned rootfs then
+  `modprobe`. The driver names its input nodes **`gpio-keys`** (two of them), NOT
+  "soc_button_array" — match buttons by capability (KEY_LEFTMETA=125), not name.
+- Power + volume are auto-adopted by ChromeOS; the Windows/home button = `KEY_LEFTMETA`
+  → launcher/home.
+
+### ✅ On-screen keyboard (OSK) fix
+- OSK had silently stopped appearing (pre-existing, unrelated to buttons — confirmed
+  by unloading soc_button_array, no change). In tablet mode ChromeOS auto-hides the
+  OSK unless it's forced. Fix: append **`--enable-virtual-keyboard`** to
+  `/etc/chrome_dev.conf` (persistent on rootfs) + `restart ui`. OSK back.
+- BONUS: because this flag *forces* the OSK on, a virtual-keyboard input device no
+  longer suppresses it — which is what makes the crosh daemon below safe (an early
+  attempt with a persistent uinput keyboard had disabled the auto-OSK).
+
+### ✅ Long-press Windows button → crosh (keyboard-free crosh access)
+- Motivation: on a keyboard-less tablet, opening crosh is otherwise impossible
+  (VT2 needs a physical keyboard; browser crosh can use the OSK). `Ctrl+Alt+T` opens
+  browser crosh.
+- `install/iconia-buttond.c` (static x86_64, in `/usr/local/sbin/iconia-buttond`,
+  autostarted by `install/iconia-buttond.conf` upstart job `start on started ui`):
+  watches the button evdev node (matched by KEY_LEFTMETA capability), and on a
+  **≥2 s hold then RELEASE** injects `Ctrl+Alt+T` via `/dev/uinput`.
+- TWO hard-won gotchas (both cost several iterations):
+  1. **Must fire on RELEASE, not while held.** The Windows button *is* KEY_LEFTMETA
+     (the Meta modifier). Injecting Ctrl+Alt+T while it's physically down makes Chrome
+     see Meta+Ctrl+Alt+T ≠ the crosh accelerator. Waiting for release gives a clean
+     Ctrl+Alt+T. (A fire-while-held build fired correctly per its debug log but never
+     opened crosh — this is why.)
+  2. **uinput device must be `BUS_USB` with a vendor/product id**, not `BUS_VIRTUAL` —
+     ChromeOS/ozone routes accelerator keys from a USB-bus keyboard but ignored a
+     virtual-bus one.
+- Hold threshold = `HOLD_MS` (currently **2000 ms**); one-line change + rebuild to tune.
+- `uinput` is a module (`CONFIG_INPUT_UINPUT=m`); persisted to the rootfs + `depmod`,
+  the upstart job `modprobe`s it in pre-start.
+- Diag tools kept: `install/iconia-btnmon.c` (dumps every key event across all evdev
+  nodes — proved the button is code 125 on `gpio-keys` with no autorepeat) and
+  `install/iconia-injtest.c` (one-shot Ctrl+Alt+T injector — proved injection opens
+  crosh, isolating the daemon logic from the injection path).
+
+### Install scripts
+- `install/iconia-buttons-install.sh` — installs soc_button_array.ko + depmod.
+- `install/iconia-buttond-install.sh` — installs the daemon binary + uinput.ko +
+  upstart job. (Both hot-apply to the live eMMC over SSH; still need baking into the
+  reproducible image — see next actions #1.)
+
+### Still TODO (unchanged priorities)
+- **Bake into the reproducible build**: soc_button_array in-config is done, but the
+  daemon binary/upstart job/uinput persistence + the `--enable-virtual-keyboard`
+  chrome_dev.conf flag are hot-applied to the live eMMC — fold into the rootfs image.
+- Disable auto-update (would overwrite the patched kernel).
+
 --- (older session-4 target list retained below) ---
 
 **State: BACKLIGHT DONE; AUDIO DONE (UCM);

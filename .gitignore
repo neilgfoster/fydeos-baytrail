@@ -1,6 +1,16 @@
 # build outputs / large artifacts - never commit kernels or the openFyde tree
+# (heavy artifacts are cached in GitHub Releases — see docs/artifact-cache.md)
 out/
 *.efi
 vmlinuz*
 build.env
 usb-profile.env.local
+
+# locally compiled install helpers (rebuilt from the .c sources; cached in releases)
+boards/*/install/iconia-buttond
+boards/*/install/iconia-btnmon
+boards/*/install/iconia-injtest
+*.o
+
+# downloaded release bundles staged by resolve-artifacts.sh
+.artifact-cache/

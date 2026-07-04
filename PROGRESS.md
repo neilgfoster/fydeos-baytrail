@@ -583,6 +583,34 @@ Three things landed, all live-debugged over SSH.
   chrome_dev.conf flag are hot-applied to the live eMMC — fold into the rootfs image.
 - Disable auto-update (would overwrite the patched kernel).
 
+### Artifact cache scaffolded (backbone of the prepare-USB flow)
+- `boards/<id>/artifacts.manifest` + `scripts/resolve-artifacts.sh` (cache lookup:
+  fingerprint config/patches/sources → tag → GitHub Release; download+verify) +
+  `scripts/publish-artifacts.sh` (cache fill). Design: `docs/artifact-cache.md`.
+  Heavy artifacts (kernel/modules ~210MB) go in Releases, NOT git/git-lfs.
+- Dry-run verified (correct cache-miss + build instructions). NOT yet published —
+  see the wrap note below.
+
+## 🚧 SESSION 5 WRAP — device NOT finished; do not finalize yet (2026-07-04)
+
+Device is a very usable FydeOS tablet, but configuration is **incomplete**. Do NOT
+publish the artifact-cache bundle or bake the final rootfs image until the backlog
+below is done — the fingerprint tag is meant to keep changing as fixes land.
+
+**Remaining configuration backlog (next session, pick one — user wants to continue):**
+1. **Bluetooth** 🟡 — stack loads, no `hci0`; bind the UART/serdev BT controller +
+   load BCM `.hcd` firmware. Self-contained, live-debuggable over SSH.
+2. **Memory optimization** — 2 GB device; zram/swap, ChromeOS mem knobs, trim
+   services. Biggest impact on everyday feel.
+3. **Power optimization** — suspend/S0ix broken (screen won't wake), battery/charging
+   via AXP288 (stack already enabled). Partly firmware-limited on Bay Trail → modest
+   ceiling, more investigation.
+4. **Drop HS200 quirk** (`sdhci.debug_quirks2=0x40`) — quick: test over cold boots.
+5. Lower priority: microSD, cameras (untested); auto-rotate (parked, closed iioservice).
+
+Also on deck (deferred to end): bake fixes into image, disable auto-update, publish
+cache bundle. Repo state committed on branch `session-5-buttons-osk-crosh`.
+
 --- (older session-4 target list retained below) ---
 
 **State: BACKLIGHT DONE; AUDIO DONE (UCM);

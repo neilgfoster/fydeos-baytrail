@@ -4,6 +4,28 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## Session 7 (2026-07-05) — MEMORY OPTIMIZATION (2 GB device)
+
+**Goal: run lean on 2 GB. Chrome is the whole story (~25 renderers); ARC not running.**
+
+- **Survey:** MemTotal 1861 MB; at rest ~863 MB avail, zram 0 used (not starving — goal
+  is headroom under tab load). AnonPages 633 MB, Cached 777 MB reclaimable. Chrome ≈
+  2189 MB summed RSS across ~25 procs (RSS overcounts shared). **ARC/Android NOT
+  running** — only idle stubs (~28 MB); no VM to reclaim. Tool: `install/iconia-mem-survey.sh`.
+- ✅ **zram lz4 → zstd** (kept 3723 MB size; ~30% more pages per RAM under pressure) +
+  `vm.swappiness=100`, `min_free_kbytes=8192`, `page-cluster=0`. Persistent via
+  `install/iconia-memtune.{sh,conf}` boot job (runs AFTER ChromeOS builds zram, converts
+  it; idempotent, only when zram empty — ChromeOS rebuilds it lz4 each boot so the job is
+  required for persistence). Milestone: Chromium 144 / FydeOS 16503.20.22.10.
+- ✅ **Chrome low-RAM flags** in `/etc/chrome_dev.conf` (Moderate profile, user choice —
+  site isolation KEPT): `--enable-low-end-device-mode` (smaller caches + background-tab
+  purge) + `--renderer-process-limit=8`. Verified live in browser cmdline; NO
+  `--disable-site-isolation` (isolation intact). avail ~863→1227 MB, used 807→527 MB,
+  chrome procs 25→14. Persists via chrome_dev.conf automatically (no boot job). Needs a
+  one-time `restart ui`. `install/iconia-chrome-memtune-install.sh` (revert arg).
+- No TLP-style whole-system tools (ChromeOS/resourced owns memory pressure + tab
+  discarding; the old `chromeos-low_mem/margin` sysfs knob is gone in M144).
+
 ## Session 6 (2026-07-05) — POWER OPTIMIZATION (largely done)
 
 **Outcome: the device already sips power; the meaningful, UX-safe wins are banked.**

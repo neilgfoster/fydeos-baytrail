@@ -1,5 +1,24 @@
+diff --git a/drivers/gpu/drm/drm_panel_orientation_quirks.c b/drivers/gpu/drm/drm_panel_orientation_quirks.c
+index c00f6f162..1dcc9f86a 100644
+--- a/drivers/gpu/drm/drm_panel_orientation_quirks.c
++++ b/drivers/gpu/drm/drm_panel_orientation_quirks.c
+@@ -148,7 +148,13 @@ static const struct drm_dmi_panel_orientation_data lcd1600x2560_rightside_up = {
+ };
+ 
+ static const struct dmi_system_id orientation_data[] = {
+-	{	/* Acer One 10 (S1003) */
++	{	/* Acer Iconia W4-820 (portrait-native 800x1280 DSI panel) */
++		.matches = {
++		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
++		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Iconia W4-820P"),
++		},
++		.driver_data = (void *)&lcd800x1280_leftside_up,
++	}, {	/* Acer One 10 (S1003) */
+ 		.matches = {
+ 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
+ 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "One S1003"),
 diff --git a/drivers/iio/accel/hid-sensor-accel-3d.c b/drivers/iio/accel/hid-sensor-accel-3d.c
-index 5eac7ea19..b599813da 100644
+index 5eac7ea19..ef256c258 100644
 --- a/drivers/iio/accel/hid-sensor-accel-3d.c
 +++ b/drivers/iio/accel/hid-sensor-accel-3d.c
 @@ -35,6 +35,35 @@ struct accel_3d_state {
@@ -38,31 +57,69 @@ index 5eac7ea19..b599813da 100644
  };
  
  static const u32 accel_3d_addresses[ACCEL_3D_CHANNEL_MAX] = {
-@@ -58,6 +87,7 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+@@ -58,6 +87,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
  		BIT(IIO_CHAN_INFO_SCALE) |
  		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
  		BIT(IIO_CHAN_INFO_HYSTERESIS),
++		.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),
 +		.ext_info = accel_3d_ext_info,
  		.scan_index = CHANNEL_SCAN_INDEX_X,
  	}, {
  		.type = IIO_ACCEL,
-@@ -68,6 +98,7 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+@@ -68,6 +99,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
  		BIT(IIO_CHAN_INFO_SCALE) |
  		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
  		BIT(IIO_CHAN_INFO_HYSTERESIS),
++		.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),
 +		.ext_info = accel_3d_ext_info,
  		.scan_index = CHANNEL_SCAN_INDEX_Y,
  	}, {
  		.type = IIO_ACCEL,
-@@ -78,6 +109,7 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+@@ -78,6 +111,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
  		BIT(IIO_CHAN_INFO_SCALE) |
  		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
  		BIT(IIO_CHAN_INFO_HYSTERESIS),
++		.info_mask_shared_by_type_available = BIT(IIO_CHAN_INFO_SAMP_FREQ),
 +		.ext_info = accel_3d_ext_info,
  		.scan_index = CHANNEL_SCAN_INDEX_Z,
  	},
  	IIO_CHAN_SOFT_TIMESTAMP(CHANNEL_SCAN_INDEX_TIMESTAMP)
-@@ -387,6 +419,14 @@ static int hid_accel_3d_probe(struct platform_device *pdev)
+@@ -218,9 +253,34 @@ static int accel_3d_write_raw(struct iio_dev *indio_dev,
+ 	return ret;
+ }
+ 
++/* Iconia W4-820: advertise a sampling-frequency list so ChromeOS iioservice will
++ * commit a streaming rate (cros-ec accels expose this; without it iioservice's
++ * buffered reads time out). 10 Hz is the rate the panel-rotation path uses. */
++static const int accel_3d_samp_freq_avail[] = { 10, 0 };
++
++static int accel_3d_read_avail(struct iio_dev *indio_dev,
++			       struct iio_chan_spec const *chan,
++			       const int **vals, int *type, int *length,
++			       long mask)
++{
++	if (chan->type != IIO_ACCEL)
++		return -EINVAL;
++
++	switch (mask) {
++	case IIO_CHAN_INFO_SAMP_FREQ:
++		*vals = accel_3d_samp_freq_avail;
++		*type = IIO_VAL_INT_PLUS_MICRO;
++		*length = ARRAY_SIZE(accel_3d_samp_freq_avail);
++		return IIO_AVAIL_LIST;
++	default:
++		return -EINVAL;
++	}
++}
++
+ static const struct iio_info accel_3d_info = {
+ 	.read_raw = &accel_3d_read_raw,
+ 	.write_raw = &accel_3d_write_raw,
++	.read_avail = &accel_3d_read_avail,
+ };
+ 
+ /* Function to push data to buffer */
+@@ -387,6 +447,14 @@ static int hid_accel_3d_probe(struct platform_device *pdev)
  	indio_dev->name = name;
  	indio_dev->modes = INDIO_DIRECT_MODE;
  

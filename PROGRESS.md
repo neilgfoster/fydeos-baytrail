@@ -473,7 +473,52 @@ the deployed #10 kernel (`6.6.76-gabcfb16364e1`). Fix: patched
 single `.ko` can be rebuilt + hot-pushed over SSH:
 `ssh root@IP 'mount -o remount,rw /; cat > /lib/modules/<ver>/kernel/.../x.ko.gz; mount -o remount,ro /' < x.ko.gz` then reboot.
 
-## Next actions (session 4)
+## ✅ DEFAULT PORTRAIT + TABLET MODE (session 4, 2026-07-04)
+
+Device boots to **tablet mode, portrait, right-side-up**, persistent, with manual
+rotation (Ctrl+Shift+Refresh). Auto-rotate still parked. Full how-to +
+reproducible artifacts: `boards/iconia-w4-820/display/`. Summary:
+- Kernel **DRM panel-orientation quirk** (`lcd800x1280_leftside_up`) for
+  `Iconia W4-820P` → desktop defaults to right-side-up portrait persistently
+  (ChromeOS wouldn't persist a manual rotation; no stable EDID). In
+  `patches/hid-accel-rotation.patch`; bzImage rebuild, vermagic unchanged.
+- **cros_config form-factor=CHROMESLATE** (`display/configfs-chromeslate.img`).
+- `/etc/chrome_dev.conf`: `--force-tablet-mode=touch_view` (tablet mode).
+- **Boot splash** pre-rotated +90° (`display/boot-splash-portrait.tar`) — frecon
+  has no rotate flag and interprets orientation opposite to Chrome.
+
+## ⭐ SESSION 4 WRAP (2026-07-04) — big session
+
+Delivered (all live-debugged over the new SSH channel — the key unlock):
+- ✅ **Backlight** — `GPIO_CRYSTAL_COVE=y` + `DRM_I915=m` (probe-order race).
+- ✅ **Audio** — RT5640 + bytcr_rt5640 machine driver + self-contained
+  `bytcr-rt5640` UCM (`audio/`); survives reboot; on-screen volume works.
+- ✅ **SSH live-debug** — root shell over wifi; ended the multi-boot loop.
+  Persistent across reboot. Connect from crosh host: `ssh -i /tmp/ik root@<ip>`.
+- ✅ **Default portrait + tablet mode** (this section).
+- 🟠 **Auto-rotate** — sensor/kernel/metadata all perfect; Chrome reads samples
+  (timeouts=0); blocked in closed ash rotation state machine. Parked.
+
+Kernel is now **6.6.76-gabcfb16364e1** (stable vermagic via `--no-dirty`), built
+from `~/openfyde/kernel-6.6` with `baytrail-hw.config` + the patch. Single-module
+hot-rebuild+SSH-push workflow proven (see PROGRESS above / display/README.md).
+
+## Next actions (session 5)
+
+**State: device is a genuinely usable FydeOS tablet — boots eMMC standalone;
+wifi, touch, display, brightness, AUDIO, tablet-mode + portrait all work.**
+
+1. **Bake everything into a reproducible image build** (currently many fixes are
+   hot-applied to the live eMMC over SSH). Fold into the rootfs/kernel build:
+   the kernel patch, `baytrail-hw.config`, the UCM, cros_config CHROMESLATE,
+   chrome_dev.conf flag, rotated splash, sshd autostart.
+2. **Disable auto-update** (would overwrite our 0x3f/patched kernel with stock 0x2b).
+3. Remaining HW polish (optional): **bluetooth** (no hci0; hci_uart/serdev bind +
+   BCM .hcd), **hardware volume/buttons**, **drop HS200 quirk** (`sdhci.debug_quirks2=0x40`).
+4. **Auto-rotate** revisit only with iioservice debug logging or a Chrome/ash
+   angle — it's the closed layer; low ROI.
+
+--- (older session-4 target list retained below) ---
 
 **State: BACKLIGHT DONE; AUDIO DONE (UCM);
 AUTO-ROTATE kernel-ready (accel_3d enumerates) but not rotating (FydeOS userspace).

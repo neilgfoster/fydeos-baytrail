@@ -26,7 +26,7 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 | Touchscreen | ✅ works | I2C-HID (SYNA7300 / hid-multitouch) | kernel | Works out of the box at OOBE. |
 | Accelerometer / sensors | ❌ broken | IIO (`kxcjk-1013`) / `SMO91D0` hub | kernel | Session 3: no IIO devices; `i2c-SMO91D0:00 can't add hid device -5`. Accel likely behind sensor hub / i2c_designware issue. |
 | eMMC | ✅ works | `sdhci-acpi` + `I2C_DESIGNWARE_BAYTRAIL` | kernel | Reliable boot. Bay Trail rebuild booted first-try (i2c semaphore likely fixed enumeration). Still carries `sdhci.debug_quirks2=0x40` (HS200 off) in grub — test dropping it over more power-cycles. |
-| microSD | untested | `sdhci-acpi` | kernel | |
+| microSD | ✅ works | `sdhci-acpi` | kernel | Tested working (session 10, 2026-07-05). |
 | USB (OTG) | partial | `dwc3` / xhci | kernel | OTG adapter used to attach the installer USB. OTG keyboard input DEAD → no tablet terminal. |
 | Battery level | ✅ works | ACPI `PNP0C0A` battery (`BATC`) | firmware/ACPI | Session 6: % is accurate & updates (watched it climb 98→100 on charge). Read via ACPI, not a PMIC driver. |
 | Charging status / bolt | ❌ broken (firmware) | ACPI `ADP1` AC + `BATC` status | **firmware-limited** | Session 6: PMIC is **Crystal Cove** (`INT33FD`, NOT AXP288/`INT33F4`) — mainline has **no Crystal Cove charger driver**, so the `crystal_cove_charger`/`pwrsrc` MFD cells stay driver-less. Native `axp288_charger`/`fuel_gauge`/`extcon` were tried and are the WRONG chip (bind to nothing). Charging works physically, but ACPI `ADP1/online` is frozen `0` and `BATC/status` frozen `Discharging` even while plugged at 100% → ChromeOS shows no bolt. Only theoretical fix is a DSDT `_PSR`/`_BST` override. Parked. |

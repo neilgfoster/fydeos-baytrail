@@ -23,10 +23,13 @@ if [ "${1:-}" = revert ]; then
 else
     echo 1 > "$DIR/has_ambient_light_sensor"
     # curve: "percent  decrease_lux  increase_lux"  (-1 = no bound; hysteresis overlaps)
+    # Night floor lowered to 5% (session 10) so the un-removable ash shutdown
+    # fade-to-white animation rides a near-black backlight in a dark room instead
+    # of blinding you. Couples with normal night brightness (dim room = ~5%).
     cat > "$STEPS_PREF" <<'STEPS'
-15.0 -1 15
-30.0 8 150
-45.0 120 450
+5.0 -1 15
+20.0 8 150
+40.0 120 450
 65.0 400 950
 85.0 900 -1
 STEPS

@@ -24,9 +24,11 @@ landscape and doesn't persist a manual rotation (no stable EDID/display-id).
    has-lid-accelerometer=true,is-lid-convertible=true}`). Marks it a tablet.
    Install: `mv` over `/usr/share/chromeos-config/configfs.img`, reboot.
 
-3. **Tablet mode flag** — append to `/etc/chrome_dev.conf` (needs cros_debug):
-   `--force-tablet-mode=touch_view`  (forces tablet UI; CHROMESLATE alone did not
-   enter tablet mode with a single accel).
+3. **UI mode flag** — append to `/etc/chrome_dev.conf` (needs cros_debug).
+   ~~`--force-tablet-mode=touch_view`~~ (was: force tablet UI). **Superseded in
+   session 10 by user decision:** `--force-tablet-mode=clamshell` — permanent
+   **desktop/clamshell** UI in every orientation, even bare. OSK still works via
+   `--enable-virtual-keyboard`. Install: `install/iconia-desktop-mode-install.sh`.
 
 4. **Boot splash rotated 90° CW** — `display/boot-splash-portrait.tar` holds the
    120 `boot_splash_frame*.png` (100% + 200%) rotated +90° so `frecon` draws them

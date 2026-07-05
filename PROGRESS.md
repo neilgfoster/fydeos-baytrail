@@ -15,6 +15,49 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 10 (2026-07-05) — permanent DESKTOP (clamshell) UI
+
+User decision: the Iconia should **always present the desktop/clamshell UX** (windowed
+apps, shelf, no forced tablet shell) in **every** orientation, even used bare as a
+tablet. This supersedes the earlier "leave tablet mode only when a monitor+kbd is
+attached" backlog idea.
+
+- **Change:** `/etc/chrome_dev.conf` `--force-tablet-mode=touch_view` → `=clamshell`.
+  `--enable-virtual-keyboard` kept so the OSK still pops with no physical keyboard.
+- **Applied live** over SSH + confirmed working on-device ("all good").
+- **Install script:** `install/iconia-desktop-mode-install.sh` (idempotent; `revert`
+  arg restores `touch_view`). Run: `ssh -i /tmp/ik root@192.168.1.31 'sh -s' < it`.
+- Still a LIVE edit (chrome_dev.conf not yet baked into `stage/`) — finalization gap
+  unchanged; the finalizer must bake `--force-tablet-mode=clamshell` now (not touch_view).
+
+### Session 10 — microSD ✅ + shutdown fade-to-white ⚠ (partial, accepted)
+
+- **microSD ✅ WORKS** — tested by user, marked in hardware-status.md. No work needed.
+- **Shutdown "fade to white" ⚠ PARTIAL FIX (accepted "good enough").** User's real goal:
+  don't get blinded at night. Root cause: the bright white is **ash's shutdown animation,
+  compiled into Chrome**, which plays BEFORE any external hook — ChromeOS does the
+  animation FIRST, then issues the shutdown request. Verified exhaustively over SSH:
+  * No `/dev/fb0` (i915 has no fbdev). Backlight = `/sys/class/backlight/intel_backlight`
+    (brightness/bl_power). `stop powerd; echo 0>brightness` DOES darken the panel (proven:
+    a 10s-hold test held the screen solid black).
+  * powerd `stop on stopping boot-services` (= at `starting pre-shutdown`), so a job on
+    `starting halt` that waits for Chrome to exit then stops powerd + blanks WORKS for the
+    post-animation tail — but the animation is already done by then (log showed chrome
+    exits ~1.4-2s in; final `bl_power=4 bright=0` set, screen went dark — user saw "long
+    pause on dark screen" = the blank working).
+  * `runlevel` returns empty mid-shutdown → a runlevel guard silently skipped the job;
+    fixed by triggering on `starting halt or starting reboot` (shutdown-only, no guard).
+  * `--disable-login-animations` flag: tried, **no effect** on the shutdown animation.
+    No animation-disable switch found in the chrome binary strings.
+  * **Conclusion:** the ~1s white flash is un-removable without rebuilding Chrome (not
+    worth it). **Accepted solution = two parts:** (1) `install/iconia-shutdown-black.conf`
+    Upstart job kills the lingering white tail during unmount (fires on halt/reboot →
+    wait chrome exit → stop powerd → frecon black → hammer backlight off). (2) Lowered the
+    **ALS night floor 15%→5%** in `iconia-als-brightness-install.sh` so at night the flash
+    rides a near-black backlight = dim, not blinding. User: "good enough."
+  * Both are LIVE (job in `/etc/init/`, ALS in `/var/lib/power_manager/`) — finalizer must
+    bake the job into `stage//etc/init/` and the ALS floor into the powerd defaults.
+
 ## Session 9 (2026-07-05) — BT HFP mic (SCO): kernel fix built, awaiting live test
 
 Chose the **kernel-patch** route over an SSDT `_DSD` overlay. `hci_bcm.c`

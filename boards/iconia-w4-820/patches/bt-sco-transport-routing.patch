@@ -1,0 +1,32 @@
+diff --git a/drivers/bluetooth/hci_bcm.c b/drivers/bluetooth/hci_bcm.c
+index 874d23089..3a592d8c8 100644
+--- a/drivers/bluetooth/hci_bcm.c
++++ b/drivers/bluetooth/hci_bcm.c
+@@ -1548,6 +1548,27 @@ static int bcm_serdev_probe(struct serdev_device *serdev)
+ 	if (err)
+ 		return err;
+ 
++	/* Iconia W4-820: the BCM4324B3 (ACPI BCM2E3F) provides no _DSD PCM
++	 * params, and its SCO PCM pins are not wired to the RT5640 codec on this
++	 * board, so HFP mic/voice never reaches the host. Force SCO routing to the
++	 * HCI transport so mSBC/CVSD voice flows over UART into CRAS. bcm_setup()
++	 * re-applies this on every open, so it survives Floss's re-init/HCI_Reset.
++	 * Only forced when firmware/_DSD did not already specify params.
++	 */
++	if (bcmdev->pcm_int_params[0] == 0xff && has_acpi_companion(&serdev->dev)) {
++		struct acpi_device *adev = ACPI_COMPANION(&serdev->dev);
++
++		if (adev && !strcmp(acpi_device_hid(adev), "BCM2E3F")) {
++			bcmdev->pcm_int_params[0] = 0x01; /* routing = HCI transport */
++			bcmdev->pcm_int_params[1] = 0x00; /* pcm_rate  */
++			bcmdev->pcm_int_params[2] = 0x00; /* frame_type */
++			bcmdev->pcm_int_params[3] = 0x00; /* sync_mode  */
++			bcmdev->pcm_int_params[4] = 0x00; /* clock_mode */
++			dev_info(&serdev->dev,
++				 "iconia: forcing SCO routing to HCI transport\n");
++		}
++	}
++
+ 	if (!bcmdev->shutdown) {
+ 		dev_warn(&serdev->dev,
+ 			 "No reset resource, using default baud rate\n");

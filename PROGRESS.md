@@ -15,6 +15,44 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 9 (2026-07-05) — BT HFP mic (SCO): kernel fix built, awaiting live test
+
+Chose the **kernel-patch** route over an SSDT `_DSD` overlay. `hci_bcm.c`
+`bcm_serdev_probe` now forces `pcm_int_params={01,00,00,00,00}` (SCO routing = HCI
+transport) when ACPI HID==`BCM2E3F` and firmware/`_DSD` supplied none. Why this beats
+the session-8 runtime `hcitool` poke: `bcm_setup()` re-sends the PCM params on **every**
+`hci_dev_open`, so it re-applies after Floss's re-init/HCI_Reset — the poke was lost only
+because Floss's re-open re-downloaded firmware *without* the param.
+
+- Patch: `patches/bt-sco-transport-routing.patch`. Rebuilt module `out/hci_uart.ko.gz`
+  (vermagic `6.6.76-gabcfb16364e1` — hot-loads on the deployed #11 kernel, no full swap).
+- Deploy/verify: `install/iconia-bt-sco-{deploy,verify}.sh`. Deploy drops the module in
+  the tree + `depmod` + reboot (routing applies at hci0 bring-up, before Floss owns it).
+- **Must be pushed from the CROSH HOST** — Crostini (build container) can't reach the LAN
+  (NAT), only the crosh host can ssh 192.168.1.31. Corrected a wrong "tablet offline"
+  read this session (it was just the NAT).
+- **TESTED & REVERTED.** Patch loaded (dmesg `iconia: forcing SCO routing`, hci0 UP), but
+  no HFP node appeared (buds stay A2DP-only until an app opens the mic) AND forcing
+  routing=transport with all-zero PCM bytes on every open **broke the whole audio path**
+  (internal speaker + YouTube dead). Rolled back via the `${module}.bak.*` copy → reboot →
+  audio restored. Blunt kernel-default is the wrong approach.
+- Confirmed: **random BD address per boot** → buds must be forgotten + re-paired after
+  every reboot (no `BCM4324B3.hcd`). Independent of this patch.
+- **Next options:** (a) SSDT `_DSD brcm,bt-pcm-int-params` overlay through the kernel's
+  normal ACPI-property path with properly-tuned (non-zero) PCM bytes, applied only when
+  HFP negotiates; or (b) **park HFP mic as a known limitation** — A2DP out works, internal
+  mic works for local capture; HFP mic is low-value on this 2013 tablet.
+
+### Session 9 addendum — internal mic also broken (parked)
+
+Chasing HFP mic surfaced that the **internal mic never worked either**. Card
+`bytcr-rt5640` runs an **AVS DSP topology**; capture yields zero frames — raw
+`arecord` → immediate `Input/output error`, `cras_test_client` capture **hangs**.
+Not a mixer/UCM gap (enabling the full analog chain didn't help); it's a
+driver/DSP capture-pipeline problem. **Parked** — both mics are now documented
+known limitations. **Recommendation: pivot to finalization** (make fixes survive a
+reinstall — the higher-value gap) rather than deep-diving mic topology on a 2013 tablet.
+
 ## Session 8 (2026-07-05) — BLUETOOTH (mostly done; HFP mic pending)
 
 **Result: `hci0: UP RUNNING`. Pairing + A2DP audio out + AVRCP controls all work.**

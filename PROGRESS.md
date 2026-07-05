@@ -15,6 +15,44 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 8 (2026-07-05) — BLUETOOTH (mostly done; HFP mic pending)
+
+**Result: `hci0: UP RUNNING`. Pairing + A2DP audio out + AVRCP controls all work.**
+Root cause was **kernel config, not the missing .hcd** (the standing hypothesis).
+
+- **Diagnosis** (`boards/iconia-w4-820/install/iconia-bt-{survey,probe2}.sh`, read-only over SSH): BCM BT is
+  onboard on the Bay Trail HS-UART — ACPI `BCM2E3F` (`\_SB.URT1.BTH0`) under `80860F0A`.
+  No `hci0` because (a) `SERIAL_DEV_BUS` off → no serdev bus, (b) `BT_HCIUART` not built,
+  (c) the ACPI HS-UART had **no ttyS** — `SERIAL_8250_LPSS=y` was set but that's the
+  PCI variant; the ACPI `80860F0A` node needs **`SERIAL_8250_DW`** (was off).
+- **Fix**: enabled in `~/openfyde/kernel-6.6/.config` + rebuilt (#11):
+  `SERIAL_8250_DW=y`, `SERIAL_DEV_BUS=y`, `BT_HCIUART=m` + `_SERDEV` + `_BCM`
+  (`BT_BCM=m` already on). After reboot: `dw-apb-uart 80860F0A:00 → ttyS0`, serdev
+  `serial0-0` enumerates, `hci_uart_bcm` auto-binds via ACPI, btbcm IDs the chip
+  **BCM4324B3** (chip id 84) — the BT half of the same BCM4324 combo as wifi.
+- **Deploy over SSH** (not the old USB PID-1 path): new `vmlinuz`→eMMC ESP `vmlinuz.A`
+  (xloadflags 3f 00; old backed up as `vmlinuz.A.bak-bt`) + `hci_uart.ko.gz`/`btbcm.ko.gz`
+  →module tree + on-device `depmod`. Script `boards/iconia-w4-820/install/iconia-bt-deploy.sh`; artifacts
+  staged in `~/openfyde/bt-deploy/`.
+- **FydeOS uses Floss** (`btmanagerd`), NOT BlueZ. So BlueZ CLI (btmgmt/hcitool) fails
+  with "Invalid Index/Device busy" — Floss owns hci0 exclusively (HCI user-channel).
+  Test Bluetooth through the **ChromeOS UI**, not BlueZ tools.
+- ⏳ **HFP mic (SCO) — NOT working yet.** CRAS shows the `BLUETOOTH_NB_MIC` node and
+  selects it, but capture is 0 bytes with no `sco_conn` in dmesg. Cause: BCM4324B3
+  defaults SCO audio to its **hardware PCM/I2S pins** (not wired to the RT5640 here).
+  Proved the chip **accepts** `Write_SCO_PCM_Int_Param` (vendor `0xFC1C`, routing=01
+  transport) with **status 0x00** — but Floss's HCI-reset reverts it; doesn't persist,
+  and the manual poke left BT unstable (reboot restores). Experiment:
+  `boards/iconia-w4-820/install/iconia-bt-sco-hci.sh`.
+- **Next session (mic)**: send that proven vendor cmd at driver init, BEFORE Floss —
+  via ACPI `_DSD brcm,bt-pcm-int-params` (SSDT overlay on BCM2E3F, which mainline
+  hci_bcm reads) or a small kernel patch defaulting bcm serdev PCM routing to transport.
+  Separately, no `brcm/BCM4324B3.hcd` (no Windows driver to extract) → random BD address
+  per boot; pairings may not survive reboot — verify, may need a fixed-address workaround.
+- **Reproducibility**: the #11 kernel + serdev/UART config must fold into the finalization
+  build (kernel artifact bundle + stage/). BT needs nothing in `stage/` beyond the kernel
+  (serdev auto-binds); the mic fix (once found) does.
+
 ## Session 7 (2026-07-05) — MEMORY OPTIMIZATION (2 GB device)
 
 **Goal: run lean on 2 GB. Chrome is the whole story (~25 renderers); ARC not running.**

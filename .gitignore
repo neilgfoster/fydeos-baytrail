@@ -14,3 +14,7 @@ boards/*/install/iconia-injtest
 
 # downloaded release bundles staged by resolve-artifacts.sh
 .artifact-cache/
+
+# proprietary Widevine CDM blob — staged for rootfs bake, md5-pinned (see the
+# README beside it). NOT redistributed in git; re-sourced per that README.
+boards/*/stage/opt/google/chrome/WidevineCdm/**/libwidevinecdm.so

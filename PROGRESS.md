@@ -15,6 +15,37 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 14 (2026-07-07) — WIDEVINE CDM rootfs bake (first `stage/` content) ✅
+
+**Goal:** make Widevine (Netflix/Spotify/DRM) present by default so a clean re-flash
+has it with no post-install steps — not the runtime `enable_libwidevine` toggle whose
+stateful copy a powerwash/reinstall wipes.
+
+**How FydeOS does it (learned this session):** `/usr/bin/enable_libwidevine --file <so>`
+md5-checks the blob against a pinned value, copies it to STATEFUL
+(`/mnt/stateful_partition/unencrypted/widevine/WidevineCdm/_platform_specific/cros_x64/`),
+and `/etc/init/widevine-cdm.conf` mounts it over `/opt/google/chrome/WidevineCdm` at boot.
+Stock FydeOS ships `/opt/.../WidevineCdm` as an empty stub (manifest v4.10.2557.0, no `.so`).
+Chrome loads a *bundled* CDM from that `/opt` path directly — so baking the `.so` into the
+rootfs bundled path needs no stateful, no toggle, survives powerwash.
+
+**Done:**
+- Confirmed on the Iconia (192.168.1.31): Widevine currently WORKING (`enable_libwidevine
+  --status` = yes); blob present in stateful. Pulled it off the device.
+- Verified artifact: `libwidevinecdm.so`, 11431856 bytes, x64, **md5
+  `4c9dfe80684b306b0029ef7b9db7113a`** (== FydeOS's pinned x64 value).
+- Staged at rootfs-mirrored path for `inject-rootfs.sh`:
+  `boards/iconia-w4-820/stage/opt/google/chrome/WidevineCdm/_platform_specific/cros_x64/libwidevinecdm.so`
+  — the **first real content in `stage/`**, starting to close the finalization gap.
+- Blob is git-ignored (proprietary + 11 MB, consistent with "no heavy blobs in git");
+  tracked `README.md` beside it documents md5 + how to re-source. `.gitignore` updated.
+
+**Left / caveats:** not yet exercised via an actual `inject-rootfs` USB build+reinstall
+(that's the deferred finalization step — see reproducibility banner). When finalization is
+wired, decide whether the blob becomes a resolved release asset (like the kernel bundle)
+rather than a manual local drop. Bake requires the non-verified menuentry (verity already
+broken on this board).
+
 ## Session 13 (2026-07-07) — AC/BATTERY REPORTING + POWER DRAIN ✅
 
 **Symptom:** device reported correct power/AC state only at boot, then froze; tray icon

@@ -15,6 +15,38 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 12 (2026-07-07) — SCREEN AUTO-ROTATE ✅ (the original problem)
+
+The device's founding bug — screen 90° out — is **FIXED, and auto-rotate works** in
+all four orientations. Done via a hot-loadable **module**, NO risky vmlinuz rebuild.
+
+- **Accel driver patch** (`patches/hid-accel-rotation.patch`, reworked): the accel is
+  `CONFIG_HID_SENSOR_ACCEL_3D=m`; with `setlocalversion --no-dirty` the vermagic stays
+  `6.6.76-gabcfb16364e1`, so a rebuilt `.ko` hot-loads on the running kernel. Patched
+  `hid-sensor-accel-3d.c` to **hardcode** mount matrix `0,-1,0; 1,0,0; 0,0,1` (90° about
+  Z; sign verified upright on-device) + `label=accel-display`/`location=lid`/samp_freq
+  list so ChromeOS ash/iioservice consumes it like a cros-ec accel.
+- **Dropped the SSDT** (`initramfs/ssdt-accel-mtx.{asl,aml}` deleted): it put
+  `mount-matrix` `_DSD` on the ACPI I2C-HID node, which the child MFD platform device
+  never inherits, so `iio_read_mount_matrix()` fell back to identity — the real flaw in
+  the old kernel-#12 attempt. Also: the earlier brick was the *deploy* (ESP-full →
+  truncated vmlinuz), not proof the kernel was bad.
+- **Userspace route confirmed DEAD END:** ChromeOS iioservice reads the read-only kernel
+  sysfs `in_accel_mount_matrix`, NOT the freedesktop `ACCEL_MOUNT_MATRIX` udev prop; no
+  ACPI configfs for a runtime SSDT. Must be the module.
+- **Deploy:** `install/iconia-accel-rotation-install.sh` (push `out/hid-sensor-accel-3d.ko.gz`
+  → tree + depmod + reboot). sha `fa13192f…`.
+- **Mode:** removed `--force-tablet-mode` entirely — device is a convertible
+  (form-factor=CHROMESLATE, is-lid-convertible=true), boots **laptop**, FydeOS
+  Laptop/Tablet toggle switches to tablet (auto-rotates). No FydeOS pref for
+  "tablet-default + keep toggle"; is-lid-convertible=false didn't move the default →
+  reverted to true. `iconia-desktop-mode-install.sh` rewritten to strip the force flag.
+- **Still OPTIONAL:** DRM `panel_orientation` quirk (same patch, `CONFIG_DRM=y` built-in)
+  fixes only the *base/boot* orientation (boot splash + landscape-at-login), worked
+  around by manual Settings→Displays→Orientation=90° in laptop mode. Needs a vmlinuz
+  rebuild → **USB smoke-test standalone before eMMC `vmlinuz.A`**. Auto-rotate doesn't
+  need it. All session-12 changes are still LIVE edits (finalization gap unchanged).
+
 ## Session 10 (2026-07-05) — permanent DESKTOP (clamshell) UI
 
 User decision: the Iconia should **always present the desktop/clamshell UX** (windowed

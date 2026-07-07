@@ -18,14 +18,26 @@ index c00f6f162..1dcc9f86a 100644
  		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
  		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "One S1003"),
 diff --git a/drivers/iio/accel/hid-sensor-accel-3d.c b/drivers/iio/accel/hid-sensor-accel-3d.c
-index 5eac7ea19..ef256c258 100644
+index 5eac7ea19..dcb8f9637 100644
 --- a/drivers/iio/accel/hid-sensor-accel-3d.c
 +++ b/drivers/iio/accel/hid-sensor-accel-3d.c
-@@ -35,6 +35,35 @@ struct accel_3d_state {
+@@ -35,6 +35,47 @@ struct accel_3d_state {
  	int scale_precision;
  	int value_offset;
  	int64_t timestamp;
 +	struct iio_mount_matrix mount_matrix;
++};
++
++/* Iconia W4-820: hardcode the accel mount matrix (90 deg about Z) directly in
++ * the driver. The earlier SSDT _DSD approach put "mount-matrix" on the ACPI
++ * I2C-HID node (\_SB.I2C5.SHUB), but the accel runs on the child MFD platform
++ * device (HID-SENSOR-200073.auto) which does NOT inherit that _DSD, so
++ * iio_read_mount_matrix() silently fell back to identity. Set it in code so it
++ * always applies (sign tunable on the USB smoke-test boot). */
++static const struct iio_mount_matrix iconia_accel_mount_matrix = {
++	.rotation = { "0", "-1", "0",
++		      "1",  "0", "0",
++		      "0",  "0", "1" },
 +};
 +
 +/* Iconia W4-820: expose a mount matrix + location so ChromeOS ash/iioservice
@@ -57,7 +69,7 @@ index 5eac7ea19..ef256c258 100644
  };
  
  static const u32 accel_3d_addresses[ACCEL_3D_CHANNEL_MAX] = {
-@@ -58,6 +87,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+@@ -58,6 +99,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
  		BIT(IIO_CHAN_INFO_SCALE) |
  		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
  		BIT(IIO_CHAN_INFO_HYSTERESIS),
@@ -66,7 +78,7 @@ index 5eac7ea19..ef256c258 100644
  		.scan_index = CHANNEL_SCAN_INDEX_X,
  	}, {
  		.type = IIO_ACCEL,
-@@ -68,6 +99,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+@@ -68,6 +111,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
  		BIT(IIO_CHAN_INFO_SCALE) |
  		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
  		BIT(IIO_CHAN_INFO_HYSTERESIS),
@@ -75,7 +87,7 @@ index 5eac7ea19..ef256c258 100644
  		.scan_index = CHANNEL_SCAN_INDEX_Y,
  	}, {
  		.type = IIO_ACCEL,
-@@ -78,6 +111,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
+@@ -78,6 +123,8 @@ static const struct iio_chan_spec accel_3d_channels[] = {
  		BIT(IIO_CHAN_INFO_SCALE) |
  		BIT(IIO_CHAN_INFO_SAMP_FREQ) |
  		BIT(IIO_CHAN_INFO_HYSTERESIS),
@@ -84,7 +96,7 @@ index 5eac7ea19..ef256c258 100644
  		.scan_index = CHANNEL_SCAN_INDEX_Z,
  	},
  	IIO_CHAN_SOFT_TIMESTAMP(CHANNEL_SCAN_INDEX_TIMESTAMP)
-@@ -218,9 +253,34 @@ static int accel_3d_write_raw(struct iio_dev *indio_dev,
+@@ -218,9 +265,34 @@ static int accel_3d_write_raw(struct iio_dev *indio_dev,
  	return ret;
  }
  
@@ -119,7 +131,7 @@ index 5eac7ea19..ef256c258 100644
  };
  
  /* Function to push data to buffer */
-@@ -387,6 +447,14 @@ static int hid_accel_3d_probe(struct platform_device *pdev)
+@@ -387,6 +459,14 @@ static int hid_accel_3d_probe(struct platform_device *pdev)
  	indio_dev->name = name;
  	indio_dev->modes = INDIO_DIRECT_MODE;
  
@@ -128,7 +140,7 @@ index 5eac7ea19..ef256c258 100644
 +	 * otherwise expose no label/location, unlike cros-ec accels). */
 +	if (!strcmp(name, "accel_3d")) {
 +		indio_dev->label = "accel-display";
-+		iio_read_mount_matrix(&pdev->dev, &accel_state->mount_matrix);
++		accel_state->mount_matrix = iconia_accel_mount_matrix;
 +	}
 +
  	atomic_set(&accel_state->common_attributes.data_ready, 0);

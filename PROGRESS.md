@@ -15,6 +15,40 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 13 (2026-07-07) — AC/BATTERY REPORTING + POWER DRAIN ✅
+
+**Symptom:** device reported correct power/AC state only at boot, then froze; tray icon
+stuck. Hidden underneath: a ~50 IRQ/s interrupt storm draining power (kept SoC out of C7S).
+
+**Root cause (DSDT-disassembled + confirmed on-device):** AC/battery is a ULPMC-style
+embedded controller on the fragile Bay Trail **i2c-0** (`\_SB.I2C1`) bus, accessed by AML
+via GenericSerialBus OpRegions (`ADP1._PSR` reads `I2C1.ACDF`, not the Crystal Cove PMIC).
+A level-triggered ACPI GPIO event **`GPO2._L12`** (GpioInt pin `0x12`=18 on INT33FC:02)
+calls `I2C1.BATC.INTR()` to read+clear the EC IRQ. That i2c-0 read kept timing out
+(`i2c_designware 80860F41:00: timeout waiting for bus ready`) → EC IRQ never cleared →
+level GPE re-fired ~50/s forever, and the flood **starved the bus** so `_PSR`/`_BST`
+polling also failed → frozen AC/battery. Storm caused the freeze. (i2c-0 has no scl-gpios
+recovery — `No GPIO consumer scl found` — so once wedged it stays wedged; controller
+unbind/bind did NOT recover it.)
+
+**Fix (two parts, both persistent + in repo):**
+1. Kernel cmdline `gpiolib_acpi.ignore_interrupt=INT33FC:02@18` — mutes the storming GPIO
+   event (`byt_gpio INT33FC:02: Ignoring interrupt on pin 18`). Added to the ACTIVE
+   `<ESP p12>/boot/grub/grub.cfg` line 11 (backup `grub.cfg.bak-gpe`). Result: IRQ storm
+   gone, 0 bus timeouts, battery gauge live, AC correct on read.
+2. `iconia-acpoll` upstart job — muting the event also removed the only power_supply
+   push-notify (0 udev change events on plug/unplug), so powerd/tray only updated on a
+   slow erratic internal poll. Job does `udevadm trigger --action=change` on power_supply
+   every 5s → tray tracks plug/unplug within ~5s. Files:
+   `install/iconia-acpoll.{sh,conf}` + `iconia-acpoll-install.sh`; live at
+   `/usr/local/sbin/iconia-acpoll` + `/etc/init/iconia-acpoll.conf`.
+
+**VERIFIED end-to-end:** multi-cycle plug/unplug tracked; storm=0; user confirmed tray
+follows (few-seconds delay = the 5s poke cadence, tunable).
+
+**Finalization follow-up:** bake the cmdline flag into the reproducible grub cmdline and
+the `iconia-acpoll` job into `stage/` when the finalization pass happens.
+
 ## Session 12 (2026-07-07) — SCREEN AUTO-ROTATE ✅ (the original problem)
 
 The device's founding bug — screen 90° out — is **FIXED, and auto-rotate works** in

@@ -15,7 +15,79 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 16 (2026-07-08) — ARC++ TRUE root cause: KERNEL VERSION SKEW (supersedes S15 layers 3–4) ⏳ build running
+
+**TL;DR:** Session 15's "layer 3 binfmt_misc + layer 4 StartArcMini 25s timeout" were a mis-read.
+The real, single root cause of ARC not working is a **kernel/userspace version skew**: the tablet runs
+a **custom 6.6.76 (ChromeOS R138) kernel** under a **FydeOS 16503 / M144 / R144 userland whose kernel is
+6.6.99**. The R144 ARC runtime (`run_oci`) **SIGSEGVs** (GP fault in libc, in the post-`unshare`
+android-uid child) on the R138 kernel's ashmem/container ABI → mini-container crashes ~250ms after start
+→ Chrome retries → the "Android/Play wizard" spins forever. Fix = rebuild a **version-matched 6.6.99
+kernel**. Built it; it boots to splash on the tablet but bootlooped once (missing matching modules —
+being fixed now).
+
+**How we got here (grounding, per user's steer):**
+- ARC actually boots **on-demand**: mini-container starts then idles-down; full container + `system_server`
+  only come up after **opt-in completes** (sets pref `arc.enabled`). "android-sh: PID file not found" / no
+  android procs at idle is NORMAL, not breakage. `android-sh` PID lookup is broken on this build regardless.
+- **GApps was a red herring.** User re-flashed **OpenGApps (Q/10)** ~08:34 → it corrupted the ARC++ `/system`
+  overlay (wrong ownership/SELinux/build.prop-md5) → `arcbootcontinue` exit 1 + a `run_oci` crash. We
+  **reverted it cleanly** (overlay upper is `.../unencrypted/android/root_up`; backed up to
+  `/mnt/stateful_partition/gapps-root_up-20260708-1811.tar.gz` — that tarball is the BROKEN gapps, don't
+  restore it). Stock "slim" `/system` has **no Play** (Play is an add-on) — that's why the opt-in wizard spins
+  without it. But the deeper blocker below is kernel, not GApps.
+- **Reference-device baseline (the key move):** the crosh HOST laptop runs the SAME FydeOS (slim-io / 16503 /
+  M144) and **ARC works** — on the **stock `6.6.99-fyde` kernel** (`/dev/ashmem` present, `system_server`
+  up, no `run_oci` crash). Only the tablet is different (custom 6.6.76). The tablet's June-29 working ARC
+  (9-day uptime) was that stock 6.6.99 kernel; today's reboots into the custom 6.6.76 builds is when it broke.
+- **Verified the "closed source" premise:** partly true. `git ls-remote` shows chromium openly exposes
+  `release-R144-16503.B-chromeos-6.6` (=6.6.99) up to R151 — so the ChromeOS **base** kernel matching the
+  userland IS open/buildable; only FydeOS's `-fyde` delta (commit `gfdc62122de5f`, not in chromium) is closed,
+  and it's not the ABI-relevant layer. So 6.6.76 was never forced — it's just the branch that was checked out.
+
+**Custom-kernel changes are small & port cleanly to 6.6.99** (checked): 2 patches
+(`patches/bt-sco-transport-routing.patch`→hci_bcm.c; `patches/hid-accel-rotation.patch`→hid-sensor-accel-3d.c
+[module] + drm_panel_orientation_quirks.c [built-in]) + config fragments (`config/baytrail-hw.config`,
+`axp288-power.config`). Both `git apply --check` CLEAN on R144. i915 stays `=y` (the `=m` note in baytrail-hw
+is superseded — `noinitrd` needs it built-in). 6.6.99 already ships working ashmem, so DROP the manual
+`CONFIG_ASHMEM` add.
+
+**What we BUILT this session (all on build host `penguin`, kernel-only — no full-OS build):**
+- Fetched `release-R144-16503.B-chromeos-6.6` (=6.6.99) via `git fetch --depth 1` (shallow; the repo is a
+  shallow clone so full fetch enumerates ~4M objects & stalls — always `--depth 1`, FOREGROUND, since
+  background git fetch here dies exit 144). Worktree at `~/openfyde/kernel-r144`.
+- Applied both patches; config = `kernel-6.6.76-working.config` → `make olddefconfig` (only 11 benign deltas,
+  ashmem=y/i915=y/binder built-in). Built **bzImage 6.6.99-g7232af57f054** (10,580,992 bytes,
+  sha256 `2a860cac68aa68a6439b75db7a7f761af6e1b38c7958a065b70ee5522cffff8e`).
+- Deployed as a 2nd grub entry ("FydeOS R144 TEST") keeping #14 default; ESP was full so dropped `vmlinuz.ctl`
+  to fit. Set default=1, rebooted → **reached FydeOS splash then bootlooped** (6.6.99 + i915=y BOOT/DISPLAY
+  WORKS on Bay Trail!). **Cause: deployed vmlinuz WITHOUT its matching `/lib/modules/6.6.99-g7232af57f054/`**
+  — a critical `=m` driver fails at userspace → reset. Lesson: a kernel version bump needs modules installed too.
+- **Recovery:** USB auto-restore did NOT run (tablet EFI-boots the USB → normal init; the recovery script was
+  on the legacy/syslinux `chromeos-usb.A` entry). User plugged an **OTG keyboard**, selected #14 at grub → booted.
+  Over SSH set grub `default=0`. Tablet SAFE on #14; R144 entry + `vmlinuz.r144` still staged. **OTG keyboard is
+  available now → the "no keyboard" constraint is lifted; future R144 tests keep default=0 and select at grub.**
+
+**⏳ IN PROGRESS at session end:** building the matching 6.6.99 modules on penguin —
+`cd ~/openfyde/kernel-r144 && make -j8 modules && make modules_install INSTALL_MOD_PATH=/tmp/r144-mods`
+(log `/tmp/r144-mods-build.log`, EXIT_ marker). vermagic `6.6.99-g7232af57f054`.
+
+**NEXT SESSION (resume here):**
+1. Confirm modules build finished (`grep EXIT_0 /tmp/r144-mods-build.log`), tree at `/tmp/r144-mods/lib/modules/6.6.99-g7232af57f054/`.
+2. Tar + push to tablet via Downloads share → crosh → SSH; install into `/lib/modules/6.6.99-g7232af57f054/`
+   (remount rootfs rw or stage), `depmod`.
+3. Reboot, select "FydeOS R144 TEST" at grub (keyboard) → verify `run_oci` NO segfault + `system_server` up +
+   display/backlight OK.
+4. If good: make R144 default, rebuild rotation `.ko` for 6.6.99 vermagic + redeploy, then finalization.
+Full detail in memory `iconia-kernel-config-baseline`, `iconia-android-arc-diag`, `iconia-arc-setup`.
+
+---
+
 ## Session 15 (2026-07-08) — ANDROID / ARC++ deep-dive: overlay + ashmem FIXED, houdini/timeout remain ⏳
+> **NOTE (superseded by Session 16):** layers 1–2 (overlay `allow_overlayfs`, ashmem) were real & remain
+> valid, but the "layer 3 binfmt_misc" and "layer 4 25s timeout" conclusions were WRONG. The true blocker is
+> the 6.6.76-vs-6.6.99 kernel version skew (run_oci SIGSEGV) — see Session 16 above. binfmt_misc is not
+> required (ARM apps use libnativebridge/libhoudini.so, not binfmt_misc; no houdini binary in images).
 
 **Goal:** figure out why Android (ARC) never starts. Root-caused a 4-layer chain; fixed the
 two hard kernel-level blockers and deployed them; identified the rest. Driven live over SSH

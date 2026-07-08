@@ -73,6 +73,21 @@ say "cp exit code: $RC"
 NEW="$(sha256sum vmlinuz.A 2>&1 | awk '{print $1}')"
 say "after: $NEW"
 sync
+
+# --- session-16: also undo the R144 A/B-test grub changes (default=1 -> vmlinuz.r144
+#     bootloops). Our vmlinuz.A itself was fine this time; the fault was grub. ---
+GRUB="$EESP_MNT/boot/grub/grub.cfg"
+if [ -f "$EESP_MNT/boot/grub/grub.cfg.pre-r144.bak" ]; then
+  say "restoring grub.cfg from pre-r144 backup (single #14 entry, default=0)"
+  cp -f "$EESP_MNT/boot/grub/grub.cfg.pre-r144.bak" "$GRUB"
+elif [ -f "$GRUB" ]; then
+  say "no pre-r144 backup found; forcing grub default=0"
+  sed -i "s/^set default=.*/set default=0/" "$GRUB"
+fi
+rm -f "$EESP_MNT/syslinux/vmlinuz.r144" 2>/dev/null
+sync
+say "grub default now: $(grep -E '^set default=' "$GRUB" 2>&1)"
+
 umount "$EESP_MNT" 2>/dev/null
 
 if [ "$NEW" = "$GOOD" ]; then

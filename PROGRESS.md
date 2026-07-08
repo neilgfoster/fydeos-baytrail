@@ -15,6 +15,73 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 17 (2026-07-09) — R144 modules deployed; kernel boots+recovers; WiFi broke then fixed via USB
+
+**TL;DR:** Deployed the S16-built 6.6.99 module tree to the tablet, booted the R144 kernel
+successfully (no bootloop this time — modules were the missing piece), then had to revert to 6.6.76
+because WiFi (needed for SSH + ARC opt-in) was down. A `/lib/modules` symlink I introduced to dodge a
+full rootfs **broke early module autoload on BOTH kernels**. Recovered the device fully via a new USB
+PID-1 script. **WiFi is back; device working on 6.6.76.** ARC-on-6.6.99 is NOT yet validated (blocked
+on WiFi-on-6.6.99, next session).
+
+**What happened, in order:**
+1. **Module transfer filled the rootfs.** Pushed `r144-modules.tar.gz` (sha `98a75c99…`) to the tablet
+   and extracted into `/lib/modules/` — but the eMMC **rootfs is 2.7G and was already 100% full**. A
+   second ~200M tree (6.6.76 tree is 199M; 6.6.99 is 148M) does not fit → tar died `No space left`.
+2. **Relocated modules to stateful + symlink (the mistake).** Stateful has 38G free. Built a combined
+   tree at `/mnt/stateful_partition/unencrypted/lib-modules/{6.6.76-…,6.6.99-…}`, deleted the on-rootfs
+   `/lib/modules`, and replaced it with `ln -s …/lib-modules /lib/modules`. Freed 207M on rootfs. Ran
+   `depmod` for both versions (366 modules for 6.6.99).
+3. **R144 booted!** Selected "FydeOS R144 TEST" at grub (OTG keyboard) → reached login. The S16 bootloop
+   was purely the missing modules; with them staged the 6.6.99 kernel boots to userspace on Bay Trail.
+4. **But WiFi/auto-rotate were down on R144** — expected: rotation `.ko` was built for 6.6.76 vermagic
+   (needs rebuild for 6.6.99); WiFi needs investigation. No SSH (SSH rides WiFi) → can't debug ARC live.
+   Reverted to 6.6.76 (grub default=0) to restore the debug channel.
+5. **WiFi was ALSO dead on 6.6.76 now** — the regression. **Root cause: the `/lib/modules` symlink.**
+   `brcmfmac` (SDIO 02D0:4324) autoloads during **very early coldplug, BEFORE stateful is mounted**, so
+   the symlink target didn't exist yet → `modprobe` failed and was never retried → no wlan on *either*
+   kernel. (Confirmed the module + SDIO alias exist and are correct; it was purely a load-timing issue.)
+6. **Recovery via USB PID-1 script** (`install/iconia-modules-restore.sh`, NEW): mounts eMMC ROOT-A +
+   stateful, drops the bad symlink, copies the real **6.6.76 tree back onto the rootfs** (so it autoloads
+   early like before), re-creates `/lib/modules/6.6.99-…` as a per-version symlink into stateful (keeps
+   R144 bootable), `depmod`s and verifies the brcmfmac SDIO alias. Booted it → **WiFi restored.**
+
+**KEY LEARNINGS (today):**
+- **eMMC rootfs is a hard 2.7G / chronically ~full.** It cannot hold two kernel module trees. Do NOT
+  extract a second `/lib/modules/<ver>` onto it. Options: put the *inactive* kernel's tree on stateful
+  and symlink **the version subdir** (`/lib/modules/<ver>` → stateful), but keep the **currently-booting**
+  kernel's tree as REAL files on the rootfs. Never make `/lib/modules` itself a symlink.
+- **Never symlink all of `/lib/modules` into stateful.** Early SDIO/USB coldplug (brcmfmac, usbhid) runs
+  before stateful mounts → dangling symlink → those modules never load (WiFi + USB-HID dead). The
+  running kernel's modules must be real files on the rootfs. (If we ever must put the active kernel's
+  modules on stateful, we'd need an early `udevadm trigger` re-coldplug *after* stateful mounts.)
+- **USB grub gotcha (finally pinned):** the tablet is **32-bit UEFI → loads `efi/boot/bootia32.efi`,
+  which reads its config from `/boot/grub/grub.cfg`** (grub prefix), NOT `efi/boot/grub.cfg`. Editing
+  `efi/boot/grub.cfg` (what x64 uses) does nothing on this tablet — that's why past "USB auto-recovery
+  didn't run". **Always edit `<ESP>/boot/grub/grub.cfg` for this device.** `syslinux/*.cfg` is BIOS
+  (`cros_legacy`) and also unused on UEFI. Recovery USB = `/dev/sda` (ROOT-A `sda3` writable, ESP `sda12`).
+- **The USB was left pointed at `iconia-esp-restore.sh` from S16.** Booting it this session first re-ran
+  the *kernel* restore (reverted eMMC `vmlinuz.A` → session-8 `bak-bt`, reverted grub to single entry,
+  removed the R144 TEST entry + `vmlinuz.r144`). Harmless — session-8 and #14 share the
+  `6.6.76-gabcfb16364e1` vermagic so the module tree matches either — but it means **R144 test staging on
+  the eMMC ESP is gone** and must be re-created next session. Always reset the USB's `/boot/grub/grub.cfg`
+  `init=` after using it.
+- **The 6.6.99 module tree is intact on stateful** (`…/unencrypted/lib-modules/6.6.99-g7232af57f054`, 366
+  modules) and reachable via the per-version symlink — so re-testing R144 does NOT require re-transfer.
+
+**NEXT SESSION (to validate ARC on 6.6.99):**
+1. Re-stage R144 on the eMMC ESP: copy `vmlinuz.r144` (sha `2a860cac…`, still in repo/Downloads) to the
+   eMMC `/syslinux/`, add a "FydeOS R144 TEST" grub entry to the **eMMC** `/boot/grub/grub.cfg`.
+2. **Fix WiFi-on-6.6.99 BEFORE booting for real** so we keep SSH: from the 6.6.76 boot (WiFi up), inspect
+   the stateful 6.6.99 tree's `modules.alias` for the `v02D0d4324` SDIO alias, and check which brcmfmac
+   firmware the 6.6.99 driver wants — the b5 driver lists `brcmfmac43241b5-sdio.bin` whereas we only
+   decompressed **b4**. Likely fix = stage the b5 blob (or confirm b4 is used for our rev) in
+   `/lib/firmware/brcm/`. Also: the 6.6.99 tree's *own* early-autoload timing (it's symlinked to stateful)
+   may need the `udevadm trigger` re-coldplug hook — decide per whether brcmfmac loads at all.
+3. Rebuild the rotation (`hid-sensor-accel-3d`) and BT `.ko` against **6.6.99** vermagic.
+4. Boot R144 with WiFi, then check ARC: `uname -r`=6.6.99, no `run_oci` GP-fault in dmesg, `system_server`
+   + android-uid procs up after opt-in. THAT is the ARC-fix acceptance test.
+
 ## Session 16 (2026-07-08) — ARC++ TRUE root cause: KERNEL VERSION SKEW (supersedes S15 layers 3–4) ⏳ build running
 
 **TL;DR:** Session 15's "layer 3 binfmt_misc + layer 4 StartArcMini 25s timeout" were a mis-read.

@@ -97,6 +97,11 @@ if mount "$EMMC_ESP" "$EESP_MNT" 2>/dev/null; then
     # keep console=tty1/earlycon/loglevel=7 for visible boot logs; drop only
     # keep_bootcon so frecon can take the display for OOBE.
     sed -i 's/ keep_bootcon//' "$G"
+    # ARC++: allow the overlay mount arc-setup needs (chromiumos_security LSM
+    # blocks overlayfs by default; syslinux boot never appends this like stock
+    # depthcharge does). Idempotent. See PROGRESS.md Session 15.
+    grep -q 'chromiumos.allow_overlayfs' "$G" || \
+      sed -i 's/\bcros_efi\b/cros_efi chromiumos.allow_overlayfs/' "$G"
     say "--- grub AFTER ---"; grep '  linux' "$G" >> "$TRACE" 2>&1
     sync
   else

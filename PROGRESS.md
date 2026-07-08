@@ -15,6 +15,79 @@ rootfs `stage/` vs powerwash-safe `/usr/share/power_manager/`, plus the depmod/f
 is captured in memory `iconia-finalization-plan`. Do it AFTER the hardware backlog (BT
 etc) is closed. Acceptance test = cold-boot every row of hardware-status.md from a wipe.
 
+## Session 15 (2026-07-08) — ANDROID / ARC++ deep-dive: overlay + ashmem FIXED, houdini/timeout remain ⏳
+
+**Goal:** figure out why Android (ARC) never starts. Root-caused a 4-layer chain; fixed the
+two hard kernel-level blockers and deployed them; identified the rest. Driven live over SSH
+(192.168.1.31) plus an on-device Claude report (`~/fydeos-session-report-2026-07-08.md`).
+
+**This is legacy ARC++ (container, `arcpp-*` jobs), NOT ARCVM** — needs old Android kernel
+drivers on a 6.6 kernel. That mismatch is the whole story.
+
+**Layer 1 — overlay mount blocked by kernel LSM ✅ FIXED.**
+`arc-system-mount` failed every boot: dmesg `Chromium OS LSM: sb_mount Overlayfs mounts
+prohibited obj=".../android/root_rw"`. The `chromiumos_security` LSM
+(`security/chromiumos/lsm.c` `chromiumos_security_sb_mount`) blocks overlayfs unless the boot
+flag `chromiumos.allow_overlayfs` is set (global `__setup`, default 0, read from cmdline —
+NOT compiled in). Stock ChromeOS appends it via depthcharge; our **syslinux** boot never did.
+Fix: added `chromiumos.allow_overlayfs` to the eMMC ESP-p12 `boot/grub/grub.cfg` cmdline
+(sed after `cros_efi`). `arc-system-mount` now runs. Security note: system-wide overlayfs
+relaxation (CVE-2023-0386 class) — acceptable on a single-user personal tablet, documented.
+
+**Layer 2 — `/dev/ashmem` missing ✅ FIXED + DEPLOYED (kernel rebuild).**
+Next: mini-container start hit Chrome's 25s D-Bus timeout. Real cause: `run_oci` prechroot
+hook `arc-setup --mode=pre-chroot --create_tagged_ashmem` FATAL'd in 2ms —
+`arc_setup.cc:2570 Failed to stat ashmem on host: No such file or directory`. Legacy ARC++
+needs ashmem; mainline dropped it ~5.18; this 6.6 kernel had `# CONFIG_ASHMEM is not set`
+(driver source still present at `drivers/staging/android/ashmem.c`). Module hot-load was
+BLOCKED (`shmem_zero_setup` not EXPORT_SYMBOL'd → can't link/load a `.ko`), so built-in only.
+Rebuilt kernel `CONFIG_ASHMEM=y`, flashed `vmlinuz.A` (sha c081b15c, 10470400 bytes, xlf 3f;
+rollback `vmlinuz.A.bak-bt`=73733cc9). `/dev/ashmem` now present; prechroot succeeds <100ms.
+
+**⚠ Bootloop + recovery (learned the config-drift rule).** FIRST rebuild attempt built off the
+kernel tree's live `~/openfyde/kernel-6.6/.config` (only adding ashmem) → **early bootloop**
+(reset before ICONIA banner). Cause: that tree `.config` had drifted ~100 symbols from the repo
+canonical `kernel-6.6.76-working.config`, incl. `DRM_I915 y→m` (+TTM/CEC/DISPLAY_HELPER) — with
+`noinitrd`, i915-as-module = no early KMS = dead boot. The `=m` entries exist only to BUILD the
+hot-loaded BT/rotation modules, never to build a deployed vmlinuz. Recovered via the USB
+`iconia-esp-restore.sh` (restores `bak-bt`, hash-verified). REBUILT correctly from
+`kernel-6.6.76-working.config` + only `CONFIG_ASHMEM=y` → booted fine. **RULE: always rebuild
+vmlinuz from `kernel-6.6.76-working.config`, never the drifted tree `.config`.** vermagic
+`6.6.76-gabcfb16364e1` unchanged (MODVERSIONS off) so deployed hot-loaded modules still load.
+(ESP is 32M/tight: overwrite `vmlinuz.A` IN PLACE, don't make a 2nd full-kernel backup —
+`bak-bt` already == working kernel; delete partials to free space.)
+
+**Layer 3 — `binfmt_misc` not mounted ⏳ (fix identified, live-tested, needs persistence).**
+After ashmem, `arc-boot-continue` runs but `/system/bin/arcbootcontinue returned nonzero
+exit_code 1 after 11ms`. Cause: all Android `/system/bin` is ARM; the houdini native-bridge
+(`native_bridge is "libhoudini.so"`) can't register because **`binfmt_misc` isn't mounted**
+(`CONFIG_BINFMT_MISC=y` in kernel, but `/proc/sys/fs/binfmt_misc` empty; arc-setup's
+`RegisterAllBinFmtMiscEntries` fails on arm_exe/arm64_exe/arm_dyn/arm64_dyn). Binder is fine
+(built-in; `/dev/binder,hwbinder,vndbinder` present). Live fix works: `mount -t binfmt_misc
+binfmt_misc /proc/sys/fs/binfmt_misc` (gives register+status nodes) — needs a persistent job.
+
+**Layer 4 — `StartArcMiniContainer` 25s D-Bus timeout RACE ⚠ (remaining, deep).**
+Mini-container bring-up on this weak Atom is right at Chrome's 25s reply timeout — sometimes
+succeeds (~3.9s), sometimes NoReply-times-out (`arc_session_impl.cc:519 Failed to start ARC
+mini container`) → Play-ToS spinner. After failures Chrome's ARC provisioning state machine
+gets stuck. NOT memory (786MB avail, no OOM). This is the legacy-ARC++-on-6.6 + slow-HW tail.
+
+**Staged into repo this session (finalization):**
+- `kernel-6.6.76-working.config`: `CONFIG_ASHMEM=y` (bake ashmem into the built kernel).
+- `install/iconia-emmc-finalize.sh`: idempotently append `chromiumos.allow_overlayfs` to eMMC
+  grub cmdline (same `cros_efi` sed pattern as sshsetup's `cros_debug`).
+- `install/iconia-binfmt-misc.conf`: new upstart job to mount `binfmt_misc` at boot (houdini).
+
+**Also this session (unrelated):** buttond (Windows-key→crosh) was dead after boot —
+`respawn limit` boot-race (job starts before soc_button_array evdev node ready); `initctl
+start iconia-buttond` fixes live; real fix = make buttond wait for the node (finalization).
+Battery reporting was healthy post-reboot (acpoll running). See memory
+`iconia-buttond-respawn-boot`, `iconia-kernel-config-baseline`, `iconia-android-arc-diag`.
+
+**RESUME HERE:** wire the binfmt_misc job onto the device (or bake), re-drive Play opt-in and
+watch whether the mini-container wins the 25s timeout race now paths are warm; if it keeps
+losing, reduce prechroot work or accept ARC as best-effort on this 2013 Atom.
+
 ## Session 14 (2026-07-07) — WIDEVINE CDM rootfs bake (first `stage/` content) ✅
 
 **Goal:** make Widevine (Netflix/Spotify/DRM) present by default so a clean re-flash

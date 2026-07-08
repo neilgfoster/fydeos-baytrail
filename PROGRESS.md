@@ -68,9 +68,12 @@ is superseded — `noinitrd` needs it built-in). 6.6.99 already ships working as
   Over SSH set grub `default=0`. Tablet SAFE on #14; R144 entry + `vmlinuz.r144` still staged. **OTG keyboard is
   available now → the "no keyboard" constraint is lifted; future R144 tests keep default=0 and select at grub.**
 
-**⏳ IN PROGRESS at session end:** building the matching 6.6.99 modules on penguin —
-`cd ~/openfyde/kernel-r144 && make -j8 modules && make modules_install INSTALL_MOD_PATH=/tmp/r144-mods`
-(log `/tmp/r144-mods-build.log`, EXIT_ marker). vermagic `6.6.99-g7232af57f054`.
+**✅ 6.6.99 MODULES BUILT + STAGED (session end):** `make modules && make modules_install
+INSTALL_MOD_PATH=/tmp/r144-mods` (EXIT_0). 366 .ko (148M) at `/tmp/r144-mods/lib/modules/6.6.99-g7232af57f054/`,
+depmod done. Tarball staged to `~/MyFiles/Downloads/r144-modules.tar.gz` (sha256 `98a75c99…`) for transfer.
+NOTE: this set is from `working.config` → does NOT include rotation (`hid-sensor-accel-3d`) or BT
+(`hci_uart`) modules — on 6.6.76 those were built SEPARATELY from the drifted tree config; rebuild them for
+6.6.99 AFTER the boot test. This 366-set matches the vmlinuz and is what's needed to boot.
 
 **NEXT SESSION (resume here):**
 1. Confirm modules build finished (`grep EXIT_0 /tmp/r144-mods-build.log`), tree at `/tmp/r144-mods/lib/modules/6.6.99-g7232af57f054/`.

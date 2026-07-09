@@ -4,6 +4,78 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## Session 18 (2026-07-09) — WiFi-on-6.6.99 FIXED; tablet now runs R144; ARC skew theory DISPROVEN
+
+**TL;DR:** The tablet now boots and runs on the **version-matched 6.6.99-g7232af57f054 (R144)** kernel
+with **WiFi + SSH working**. Root-caused and fixed the WiFi-on-6.6.99 blocker (it was module load-timing,
+not firmware). Then the big surprise: **`run_oci` STILL general-protection-faults in libc on 6.6.99** — so
+the S16 "kernel version skew" theory for ARC is **wrong/incomplete**. Verified the rest of the hardware on
+6.6.99: several subsystems regressed because the 6.6.99 module set was built from minimal `working.config`.
+
+**What we did (in order):**
+1. **Diagnosed WiFi-on-6.6.99** with read-only USB PID-1 probes (`install/iconia-wifi99-diag.sh`,
+   `iconia-esp99-diag.sh`). Proved: 6.6.99 & 6.6.76 request IDENTICAL brcm firmware (b4 present, b5 NOT
+   needed); SDIO alias `v02D0d4324` + deps (brcmutil, cfg80211) all present. The ONLY problem: the 6.6.99
+   `/lib/modules` version dir was a **symlink into stateful** → brcmfmac coldplugs before stateful mounts →
+   no wlan. (Same class of bug as S17.)
+2. **Fixed it** with `install/iconia-wifi99-fix.sh` (USB PID-1): rootfs is 2.7G/100% full (holds ONE tree;
+   stateful holds both), so **swapped** — 6.6.99 tree copied REAL onto rootfs (loads early like 6.76 did),
+   6.6.76 dropped to a per-version symlink. Verified brcmfmac alias survives. **Booted R144 → WiFi up.**
+3. **R144 kernel was already staged** on the eMMC ESP (S17's "wiped" note was wrong): grub entry "FydeOS
+   R144 TEST (6.6.99 ARC fix)" + `/syslinux/vmlinuz.r144` present. Selected it at grub (OTG keyboard).
+4. **Restored SSH:** the crosh host had NO keys; the matching `iconia-debug` private key was on the Crostini
+   build host (`~/.ssh/iconia_ed25519`, pub already in ROOT-A authorized_keys). Copied it to the crosh host;
+   `ssh -i iconia_ed25519 root@192.168.1.31` works.
+5. **Verified kernel:** `uname -r` = `6.6.99-g7232af57f054`, `/dev/ashmem` native present.
+
+**⛔ ARC still broken — version skew was NOT the root cause (major correction to S16):**
+- On the matched 6.6.99 kernel, `run_oci` still **SIGSEGV/`#GP` in libc** (deterministic, libc `+0x8d7`),
+  container crashes right after `StartArcMiniContainer`; `arcbootcontinue` exit 1; the Play/opt-in wizard
+  still spins. So the migration did NOT fix ARC.
+- CPU flags on Bay Trail Z3740 (Silvermont) show only `smep` — **no smap/avx/xsave/fsgsbase**. A deterministic
+  `#GP` (not SIGILL, not page fault) in libc points at a **CPU-instruction/feature incompatibility in
+  run_oci's post-`unshare` child** — which is **tablet-specific** (the "working" reference laptop is a newer
+  CPU, so it never isolated kernel-vs-CPU). Kernel version was a red herring for the crash.
+- `crash_reporter` saved a **minidump** (`/home/chronos/crash/run_oci.*.dmp`) — decoding the exact faulting
+  instruction is the decisive next step. Also saw arc-setup `Owner uid 0 instead of 603/655360` (overlay
+  ownership residue, possibly OpenGApps leftovers).
+
+**Hardware verification on 6.6.99 (see hardware-status.md S18 table for detail):**
+- ✅ **Works:** kernel, WiFi, SSH, touchscreen, microSD, battery %, OSK, suspend-disable, eMMC/boot/display,
+  zram active.
+- ❌ **Regressed** (all because the 6.6.99 module set came from minimal `working.config`, missing the `=m`
+  drivers 6.6.76 carried): **backlight/brightness** (`/sys/class/backlight` empty), **audio** (no cards),
+  **hardware buttons** (soc_button_array not loaded → volume + Windows→crosh dead), **auto-rotate**
+  (hid-sensor-accel-3d.ko absent for 6.6.99 vermagic), **Bluetooth** (no hci). **memtune partial** (zram up
+  but lz4/swappiness-60 — our zstd/100 tune is live-only, not re-applied).
+
+**Safety net / revert:** booting 6.6.76 now has no early WiFi (its tree is a symlink); `install/
+iconia-modules-restore.sh` (USB) reverts the swap (6.6.76 real, 6.6.99 symlink) to restore 6.6.76 WiFi.
+
+### NEXT SESSION — priority order
+1. **[DECISION GATE] Decode the `run_oci` `#GP` to decide if ARC is achievable on Bay Trail at all.**
+   Artifacts already pulled toward this: tablet `/lib64/libc.so.6` → `Downloads/tablet-libc.so.6`. Get the
+   minidump too (`scp` the newest `run_oci.*.dmp`), find the r-x LOAD segment offset (`readelf -lW`), and
+   disassemble libc at the fault offset (`+0x8d7` into the exec segment) on the build host. If it's an
+   instruction Silvermont can't run (xsave/AVX-family via a mis-selected ifunc, or an FSGSBASE op) → the fix
+   is a **glibc/userland tunable** (e.g. `GLIBC_TUNABLES=glibc.cpu.hwcaps=-…`) or a CPU-mask, NOT a kernel
+   rebuild — and ARC may be salvageable. If it's a normal instruction, look at kernel config (a `-fyde`
+   delta the chromium base lacks) or the overlay ownership (arc-setup uid 0 vs 603/655360). **If ARC proves
+   unfixable on this CPU, decide explicitly whether 6.6.99 is worth keeping over 6.6.76** (6.6.99's only
+   purpose was ARC; everything else regressed).
+2. **Rebuild the 6.6.99 module set from the FULL 6.6.76 driver config** (port the `=m` set:
+   soc_button_array, snd/RT5640/SOF audio, hid-sensor-accel-3d, backlight, iio, BT `hci_uart`/`btbcm`),
+   `make modules_install` for 6.6.99, redeploy to the rootfs tree → **restores buttons + audio + auto-rotate
+   + backlight + Bluetooth in one shot**. This is the root remedy for the S18 regressions. (Build in
+   `~/openfyde/kernel-r144`; keep i915=y built-in.) Investigate backlight separately if the module rebuild
+   doesn't bring `/sys/class/backlight` back (may be a PMIC PWM cell / config symbol).
+3. **Re-apply the live tweaks + move toward baking:** re-run `iconia-memtune` (zstd + swappiness 100 +
+   min_free) and confirm all rootfs tweaks; then close the finalization gap (bake fixes so a wipe→USB→working
+   install reproduces — see memory `iconia-finalization-plan`). ESP note: only ~a few MB free — manage kernel
+   slots. Also clear/verify the ARC overlay ownership if pursuing ARC.
+4. **Lower priority:** revisit Bluetooth full bring-up (serdev bind + .hcd), charging-status ACPI (firmware-
+   limited), cameras.
+
 ## ⚠ REPRODUCIBILITY STATUS (goal: wipe → USB → working Iconia)
 
 **NOT yet achievable.** Every fix exists in the repo, but almost all are applied LIVE

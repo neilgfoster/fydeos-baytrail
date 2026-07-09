@@ -38,6 +38,36 @@ SoC: Intel Atom **Z3740D** (Bay Trail-T, Gen7 iGPU). Firmware: 32-bit UEFI, no C
 | Cameras | untested | atomisp / uvc | kernel + firmware | atomisp is notoriously painful; may be a write-off. |
 | Android / ARC++ | 🟡 blocked (kernel version skew) | legacy ARC++ container (`run_oci`) | **kernel version** | S16 TRUE root cause: ARC boots **on-demand** but `run_oci` **SIGSEGVs** (GP fault in libc, android-uid child) on the custom **6.6.76 (R138)** kernel under the **6.6.99 (R144/16503) userland** → mini-container crashes ~250ms in → the Play/opt-in wizard spins. Overlay `chromiumos.allow_overlayfs` (S15) + ashmem still valid; binfmt_misc/houdini/25s-timeout (S15 layers 3–4) were WRONG. FIX = version-matched **6.6.99** kernel from the OPEN `release-R144-16503.B-chromeos-6.6` (both Bay-Trail patches apply clean; drop manual ashmem — native in 6.6.99). bzImage BUILT (`6.6.99-g7232af57f054`). **S17: modules deployed (366 .ko, staged on stateful) → R144 now BOOTS to login on Bay Trail** (the bootloop was purely missing modules). ARC-on-6.6.99 **not yet validated**: WiFi is down on 6.6.99 (needed for SSH + opt-in) — likely the brcmfmac firmware rev (6.6.99 driver lists `…43241b5-sdio.bin`; only b4 decompressed) and/or early-autoload timing of the stateful-symlinked 6.6.99 tree. Reverted to 6.6.76 for now. Reference: crosh laptop (same slim-io/16503) runs ARC fine on stock `6.6.99-fyde`. Play Store = OpenGApps add-on (a re-flash corrupted `/system` → reverted). Detail: PROGRESS S16/S17 + memory `iconia-android-arc-diag`. |
 
+## Session 18 (2026-07-09) — verification on the 6.6.99 (R144) kernel
+
+We migrated the tablet to the version-matched **6.6.99-g7232af57f054** kernel (WiFi-on-6.6.99
+fixed — the 6.6.99 module tree is now REAL on the rootfs; see PROGRESS S18 + memory
+`iconia-kernel-config-baseline`). Status of each subsystem **on 6.6.99** vs how it was on 6.6.76:
+
+| Subsystem | 6.6.76 | **6.6.99** | Why changed / how to restore |
+|-----------|--------|-----------|------------------------------|
+| Boot / eMMC / display-lit | ✅ | ✅ works | i915=y built-in; boots to login. |
+| WiFi (brcmfmac) | ✅ | ✅ works | Fixed: 6.6.99 tree made real on rootfs (early coldplug). |
+| SSH (iconia-debug key) | ✅ | ✅ works | authorized_keys on ROOT-A; connect `ssh -i iconia_ed25519`. |
+| Touchscreen | ✅ | ✅ works | I2C-HID built-in (input event2 / SYNA). |
+| microSD | ✅ | ✅ works | mmcblk1 auto-mounts. |
+| Battery % | ✅ | ✅ works | ACPI BATC (95%). |
+| On-screen keyboard | ✅ | ✅ works | rootfs `/etc/chrome_dev.conf` (kernel-independent). |
+| Suspend-disable (idle) | ✅ | ✅ works | powerd `disable_idle_suspend=1` persisted. |
+| zram (swap active) | ✅ tuned | ⚠️ **active but UNtuned** | zram up but **lz4 / swappiness 60** — our zstd + swappiness 100 + min_free (`iconia-memtune`) is a **live-only** tweak, not re-applied after reboot. Re-run memtune / bake it. |
+| **Backlight / brightness** | ✅ | ❌ **REGRESSED** | `/sys/class/backlight/` is EMPTY on 6.6.99 (panel is lit at default, but no control node → no ALS/adaptive brightness). intel_backlight not registering — investigate config delta / PMIC PWM cell. |
+| **Audio** | ✅ (UCM) | ❌ **REGRESSED** | `/proc/asound/cards` = no cards. Audio drivers not autoloading on 6.6.99 (built from minimal working.config; the RT5640/SOF `=m` drivers 6.6.76 had aren't in the 6.6.99 set). UCM still on rootfs. |
+| **Hardware buttons** | ✅ | ❌ **REGRESSED** | `soc_button_array` not loaded (no gpio-keys nodes) → volume + Windows→crosh dead. Power works (firmware). Module missing from 6.6.99 set. |
+| **Auto-rotate** | ✅ | ❌ **REGRESSED** | No IIO devices; **`hid-sensor-accel-3d.ko` not built for 6.6.99 vermagic**. Panel-orientation quirk is built-in (patch), but the accel module is absent. |
+| Bluetooth | 🟡 partial | ❌ broken | No hci; BT `=m` modules (`hci_uart`/`btbcm`) not in 6.6.99 set (was only partial on 6.6.76 too). |
+| **Android / ARC++** | 🟡 blocked | ❌ **still broken — theory disproven** | `run_oci` **STILL `#GP`-faults in libc** on the version-matched 6.6.99 kernel → **kernel version skew was NOT the root cause**. Deterministic `#GP` at libc `+0x8d7` on Bay Trail (Silvermont; CPU flags show only `smep`, no smap/avx/xsave/fsgsbase). New lead = CPU-instruction/feature incompatibility in run_oci's post-`unshare` child (tablet-specific; the "working" reference laptop is a newer CPU). Minidump saved (`/home/chronos/crash/run_oci.*.dmp`) — decode the faulting instruction next. Also seen: arc-setup `Owner uid 0 instead of 603/655360` (overlay ownership residue) + `arcbootcontinue exit 1`. |
+
+**Root remedy for most 6.6.99 regressions:** the 6.6.99 modules were built from minimal
+`working.config`, so the `=m` drivers 6.6.76 carried (soc_button_array, snd/RT5640/SOF audio,
+hid-sensor-accel-3d, backlight, BT) are absent. **Rebuild the 6.6.99 module set from the FULL
+6.6.76 driver config (port the `=m` set), redeploy → restores buttons+audio+rotate+backlight+BT
+in one shot.** Then re-apply/bake the live tweaks (memtune). See PROGRESS S18 next-session plan.
+
 ## Fix-location legend
 
 - **kernel** — `CONFIG_*` change → rebuild `chromeos-kernel-6_6` → re-inject `vmlinuz`

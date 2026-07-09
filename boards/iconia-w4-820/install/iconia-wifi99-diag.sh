@@ -36,6 +36,18 @@ log() { echo "$*" >> "$TRACE" 2>/dev/null||true; }               # log-only (ver
 hdr() { log ""; log "======== $* ========"; }
 finish() { echo "" > "$CON"; echo "#### ICONIA WIFI99 DIAG — HALT ####" > "$CON"; say "$1"; say "=== log written to USB: $TRACE — hold power ~10s, remove USB, read it on the laptop ==="; sync; while true; do sleep 3600; done; }
 partdev() { case "$1" in *[0-9]) echo "$1p$2";; *) echo "$1$2";; esac; }
+# mount read-only, tolerating an unreplayed ext4 journal (ro,noload) — a plain
+# `-o ro` fails on a dirty journal because it can't recover it while read-only.
+mount_ro() { _e=$(mount -o ro "$1" "$2" 2>&1) && return 0; _e=$(mount -o ro,noload "$1" "$2" 2>&1) && return 0; _e=$(mount -t ext4 -o ro,noload "$1" "$2" 2>&1) && return 0; _e=$(mount -t ext2 -o ro "$1" "$2" 2>&1) && return 0; log "mount_ro $1 failed: $_e"; return 1; }
+# The eMMC whole-disk node can appear before its partition nodes exist. Force a
+# partition-table re-read, then (bulletproof) create any missing /dev/<disk>pN
+# node straight from sysfs, which lists partitions as soon as the kernel parses
+# the GPT — independent of udev/devtmpfs timing.
+ensure_parts() { _disk="$1"; _base=$(basename "$_disk")
+  partprobe "$_disk" 2>/dev/null; partx -a "$_disk" 2>/dev/null; blockdev --rereadpt "$_disk" 2>/dev/null
+  udevadm trigger --subsystem-match=block --action=add 2>/dev/null; udevadm settle --timeout=5 2>/dev/null
+  for _pd in /sys/block/"$_base"/"$_base"p*; do [ -d "$_pd" ] || continue; _pn="/dev/$(basename "$_pd")"; [ -e "$_pn" ] && continue; _mm=$(cat "$_pd/dev" 2>/dev/null); [ -n "$_mm" ] && mknod "$_pn" b "${_mm%:*}" "${_mm#*:}" 2>/dev/null && log "mknod $_pn ($_mm)"; done
+}
 find_emmc() { for d in /sys/block/mmcblk*; do b=$(basename "$d"); case "$b" in *boot*|*rpmb*) continue;; esac; sz=$(cat "$d/size" 2>/dev/null); [ "${sz:-0}" -gt 100000000 ] && { echo "/dev/$b"; return 0; }; done; return 1; }
 # decompress a (possibly .gz/.xz) module to stdout
 kocat() { case "$1" in *.gz) zcat "$1" 2>/dev/null;; *.xz) xzcat "$1" 2>/dev/null || xz -dc "$1" 2>/dev/null;; *) cat "$1" 2>/dev/null;; esac; }
@@ -59,9 +71,11 @@ done
 say "eMMC = $TARGET"
 
 EROOTA="$(partdev "$TARGET" 3)"; ESTATE="$(partdev "$TARGET" 1)"
+j=0; while [ ! -e "$EROOTA" ] && [ "$j" -lt 20 ]; do ensure_parts "$TARGET"; sleep 1; j=$((j+1)); say "wait eMMC parts try $j: p3 $([ -e "$EROOTA" ] && echo ok || echo absent)"; done
+[ -e "$EROOTA" ] || finish "FATAL: eMMC partition nodes never appeared ($EROOTA) — tell me this line"
 mkdir -p "$ROOTA_MNT" "$STATE_MNT"
-mount -o ro "$EROOTA" "$ROOTA_MNT" 2>/dev/null || finish "FATAL: cannot mount eMMC ROOT-A $EROOTA"
-mount -o ro "$ESTATE" "$STATE_MNT" 2>/dev/null || finish "FATAL: cannot mount eMMC stateful $ESTATE"
+mount_ro "$EROOTA" "$ROOTA_MNT" || finish "FATAL: cannot mount eMMC ROOT-A $EROOTA (see mount_ro line in log)"
+mount_ro "$ESTATE" "$STATE_MNT" || finish "FATAL: cannot mount eMMC stateful $ESTATE (see mount_ro line in log)"
 say "ROOT-A=$EROOTA (ro)  stateful=$ESTATE (ro)"
 
 T99="$STATE_MNT/$STATE_SUB/$KVER99"                 # 6.6.99 tree on stateful

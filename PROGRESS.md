@@ -6,10 +6,15 @@
 
 ## Session 20 (2026-07-10) — Bluetooth FIXED → ALL 5 regressed drivers restored (hci0 up for the first time ever)
 
-**TL;DR:** Bluetooth now works — `hci0 UP RUNNING`, controller **BCM4324B3**, and the FydeOS **Floss** stack
-(`btmanagerd` + `btadapterd --index=0 --hci=0`) has adopted the adapter. This is the **first time hci0 has
-ever come up** on this tablet (it was "partial/no hci0" all the way back on 6.6.76). That closes the last of
-the 5 subsystems that regressed on the minimal-config 6.6.99 build.
+**TL;DR:** Bluetooth now works on 6.6.99 — `hci0 UP RUNNING`, controller **BCM4324B3**, and the FydeOS **Floss**
+stack (`btmanagerd` + `btadapterd --index=0 --hci=0`) has adopted the adapter. (BT first worked on 6.6.76 back
+in S8; it regressed on the minimal-config 6.6.99 build — this re-does that fix on 6.6.99.) That closes the last
+of the 5 subsystems that regressed on 6.6.99. **User confirmed pairing works (2026-07-10).**
+
+**⚠️ Audio-vs-SCO note:** the `bt-sco-transport-routing.patch` (baked into build #4, fires at BT probe) was
+tested-and-REVERTED on **6.6.76/S9** because forcing SCO routing broke the internal speaker on the old AVS
+topology. On **6.6.99 it is benign** — verified after this reboot: card 0 up, INTERNAL_SPEAKER active, no ASoC
+errors (S19 uses the legacy SST path `dsp_driver=1`, not AVS). HFP mic over SCO remains a parked known-limit.
 
 **Root cause (why BT never worked, not just a regression):** the BCM BT is on the **UART** (ACPI `BCM2E3F`,
 serdev child of the DW-APB UART `80860F0A`). Without a **serdev** host, that ACPI node had nothing to bind to,
@@ -30,14 +35,25 @@ and fired at probe. vermagic unchanged (`6.6.99-g7232af57f054`) so all `=m` modu
 USB-VID-named `BCM-0bb4-0306.hcd.xz` (unverified match), controller runs fine on ROM → left alone. Optional
 future fix only if real pairing proves unstable. Full recipe in memory `iconia-6699-driver-restore`.
 
+**Bluetooth validated by user (2026-07-10): pairing works.** ✅
+
+**memtune re-checked on 6.6.99 — durable parts already active; contentious parts are OS-owned (won't force):**
+- ✅ Chrome low-mem flags (`--enable-low-end-device-mode`, `--renderer-process-limit=8`) persist in
+  `/etc/chrome_dev.conf` — the biggest lever, survives reboots.
+- ✅ `vm.min_free_kbytes=8192` + `vm.page-cluster=0` applied by the installed `iconia-memtune` upstart job
+  (runs at `started system-services`; resourced doesn't touch these). Working as designed.
+- ⚠️ `vm.swappiness=100` does NOT stick → **`resourced` manages swappiness dynamically** under memory pressure
+  (reverts to 60). Fighting it is counterproductive; left to resourced.
+- ⚠️ zram stays **lz4** (not zstd): the modern `swap_management` daemon (`SwapStart` D-Bus) owns zram setup;
+  our post-boot convert only fires when zram is empty (it never is by then). On a 1.33 GHz Bay Trail Atom
+  lz4's faster decompress is arguably preferable to zstd's capacity anyway → not pursued.
+- Net: memtune is effectively DONE for what durably helps; no further action worthwhile.
+
 ### NEXT SESSION — priority order
-1. **User validation:** pair a real BT device via FydeOS Settings UI (radio + Floss confirmed at OS level; only
-   end-to-end pairing/audio unproven). If pairing is flaky, try the `.hcd` symlink (see notes above).
-2. **Re-apply live tweaks:** `iconia-memtune` (zstd + swappiness 100 + min_free) on 6.6.99.
-3. **Close the finalization/bake gap** ([[iconia-finalization-plan]]): fold ALL S19+S20 changes (6.6.99 module
+1. **Close the finalization/bake gap** ([[iconia-finalization-plan]]): fold ALL S19+S20 changes (6.6.99 module
    set, serdev/hci_uart config, `dsp_driver=1` cmdline, GPIO_CRYSTAL_COVE=y + i915 patch, grub default=1, vmlinuz
    #4) into a reproducible wipe→USB→working install.
-4. **(Separate track) ARC:** decode the `run_oci` `#GP` minidump (S18).
+2. **(Separate track) ARC:** decode the `run_oci` `#GP` minidump (S18).
 
 ## Session 19 (2026-07-09) — COMMITTED to 6.6.99; 4/5 regressed drivers restored (only Bluetooth left)
 

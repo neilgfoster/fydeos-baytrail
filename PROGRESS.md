@@ -4,6 +4,28 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## Session 20 (2026-07-10) — END STATE (resume here)
+
+**Device: fully functional daily driver on 6.6.99/R144 build #4** (vermagic `6.6.99-g7232af57f054`, on-ESP sha
+`41b1d1a4…`). Verified working at session end: WiFi (wlan0) + SSH, backlight (`intel_backlight`, ALS auto),
+audio (`card0 bytcrrt5640`), **Bluetooth hci0 UP RUNNING (pairing user-confirmed)**, auto-rotate, hardware
+buttons, Windows-long-press→crosh (survives cold boot), no GPE storm. Repo clean & committed (HEAD `17120aa`).
+Build host `~/openfyde/kernel-r144` restored to build-#4 config (`.config.build4-bt-backlight`). ESP backups
+kept under `stateful/unencrypted/iconia-esp-backup/`.
+
+**Closed this session:** all 5 S18-regressed drivers restored (BT was the last); buttond boot fix; memtune
+re-assessed (done). **Accepted limitation:** battery/AC indicator frozen on 6.6.99 (i2c-0 EC read regression,
+not diff-localizable — see memory `iconia-ac-gpe-storm`).
+
+**FRESH NEXT STEPS (nothing half-done):**
+1. **Finalization/bake gap** ([[iconia-finalization-plan]]) — fold all S19/S20 live changes (6.6.99 module set,
+   vmlinuz #4 = GPIO_CRYSTAL_COVE=y + i915 DSI patch + serdev/BT, grub cmdline `dsp_driver=1` +
+   `ignore_interrupt`, `config/bluetooth-uart.config`, upstart jobs) into a reproducible wipe→USB→working install.
+2. **(Separate track) ARC** — decode the `run_oci` `#GP` minidump (S18); may be unachievable on Bay Trail.
+3. Optional/low-priority: BT patchRAM `.hcd` (only if pairing proves flaky); drop HS200 quirk; ARC.
+
+---
+
 ## Session 20 (2026-07-10) — Bluetooth FIXED → ALL 5 regressed drivers restored (hci0 up for the first time ever)
 
 **TL;DR:** Bluetooth now works on 6.6.99 — `hci0 UP RUNNING`, controller **BCM4324B3**, and the FydeOS **Floss**

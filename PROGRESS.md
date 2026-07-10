@@ -18,6 +18,22 @@ re-assessed (done). **Accepted limitation:** battery/AC indicator frozen on 6.6.
 not diff-localizable — see memory `iconia-ac-gpe-storm`).
 
 **FRESH NEXT STEPS (nothing half-done):**
+
+### ▶ NEXT SESSION FOCUS: ANDROID / ARC
+Get ARC++ working on the 6.6.99/R144 build. All the hardware regressions are now closed (5/5 drivers +
+backlight fixed), so ARC is the last major feature gap. Resume plan:
+- **Decode the `run_oci` `#GP` minidump** (deferred since S18) — the decision gate for whether ARC is
+  achievable on Bay Trail at all. Pull the newest `run_oci.*.dmp`, `readelf -lW` the tablet libc for the r-x
+  LOAD segment offset, disassemble libc at fault offset `+0x8d7`. If it's a Silvermont-unsupported instruction
+  (AVX/xsave ifunc, FSGSBASE) → fix is a **glibc tunable / CPU-mask**, not a kernel rebuild, and ARC is
+  salvageable. If it's a normal instruction → look at kernel config delta or arc-setup overlay ownership
+  (uid 0 vs 603/655360).
+- Context/ground-truth in memory: [[iconia-android-arc-diag]] (kernel-skew theory disproven S18; real cause is
+  the run_oci #GP), [[iconia-arc-setup]] (legacy ARC++ container, on-demand boot, opt-in gates full boot).
+- If ARC proves unfixable on this CPU, decide explicitly whether to keep chasing it or close it out as a
+  hardware limitation — the device is otherwise a complete daily driver on 6.6.99.
+
+### Completed / background items
 1. **[RESOLVED 2026-07-10, build #5] Black screen after long idle — intermittent `intel_backlight` registration race.**
    FIX SHIPPED: `patches/i915-dsi-backlight-eprobe-defer-retry.patch` makes `ext_pwm_setup_backlight()` poll
    up to 1s (20×50ms) on `-EPROBE_DEFER` instead of fatally bailing. Built vmlinuz #5 (sha `b0ffc5fc…`,
@@ -39,11 +55,13 @@ not diff-localizable — see memory `iconia-ac-gpe-storm`).
    backlight setup tolerate EPROBE_DEFER (retry), or force `crystal_cove_pwm` to register before i915 probes
    the connector (initcall/link order). Interim guard (option 2, not yet applied): boot service that disables
    powerd screen-off when `/sys/class/backlight` is empty. See memory [[iconia-backlight-probe-race]].
-3. **Finalization/bake gap** ([[iconia-finalization-plan]]) — fold all S19/S20 live changes (6.6.99 module set,
-   vmlinuz #4 = GPIO_CRYSTAL_COVE=y + i915 DSI patch + serdev/BT, grub cmdline `dsp_driver=1` +
-   `ignore_interrupt`, `config/bluetooth-uart.config`, upstart jobs) into a reproducible wipe→USB→working install.
-4. **(Separate track) ARC** — decode the `run_oci` `#GP` minidump (S18); may be unachievable on Bay Trail.
-5. Optional/low-priority: BT patchRAM `.hcd` (only if pairing proves flaky); drop HS200 quirk; ARC.
+2. **Finalization/bake gap** ([[iconia-finalization-plan]]) — fold all S19/S20/S21 live changes (6.6.99 module
+   set, vmlinuz #5 = build #4 [GPIO_CRYSTAL_COVE=y + i915 DSI patch + serdev/BT] **plus**
+   `patches/i915-dsi-backlight-eprobe-defer-retry.patch`, grub cmdline `dsp_driver=1` + `ignore_interrupt`,
+   `config/bluetooth-uart.config`, upstart jobs) into a reproducible wipe→USB→working install. NOTE: the S21
+   backlight patch must be re-applied on any clean kernel build (lives in `~/openfyde/kernel-r144`, repo has
+   only the `.patch`).
+3. Optional/low-priority: BT patchRAM `.hcd` (only if pairing proves flaky); drop HS200 quirk.
 
 ---
 

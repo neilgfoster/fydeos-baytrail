@@ -49,6 +49,20 @@ future fix only if real pairing proves unstable. Full recipe in memory `iconia-6
   lz4's faster decompress is arguably preferable to zstd's capacity anyway → not pursued.
 - Net: memtune is effectively DONE for what durably helps; no further action worthwhile.
 
+**⚠️ Battery/AC indicator FROZEN on 6.6.99 — ACCEPTED as known limitation (2026-07-10).**
+Correct once at boot then frozen (plugged shows "Discharging"). Root cause: i2c-0 EC transfers time out on
+6.6.99 ("timeout waiting for bus ready"), so ACPI BATC/ADP1 reads return stale. This is a NEW/different
+failure from the S13 GPE storm (storm is gone — the `ignore_interrupt` flag still works). Extensively
+investigated + bisected (S20): ruled out the flag, the P-Unit semaphore (no `_SEM` in DSDT → never engaged
+on either kernel), Crystal Cove (on i2c-6, not i2c-0), runtime-PM, GPIO_CRYSTAL_COVE (test build with it off
+still failed). The entire EC/i2c/LPSS/DMA/pinctrl source path is **byte-identical** between 6.6.76 (worked)
+and 6.6.99 (broken); full config diff explains all 25 deltas. So it's an emergent regression from broad
+23-release churn, not localizable by diff; a true git-bisect is blocked by per-commit vermagic breaking the
+SSH test channel (would need 6-8h of full-module rebuilds + WiFi-brick risk). **Decision:** accept as a
+documented limitation — device is otherwise fully functional; this is a stale-reading indicator on a 2013
+tablet. Full diagnosis in memory `iconia-ac-gpe-storm`. The `iconia-acpoll` poke job + `ignore_interrupt`
+flag remain deployed (harmless; keep for when/if the underlying i2c-0 read is ever fixed).
+
 ### NEXT SESSION — priority order
 1. **Close the finalization/bake gap** ([[iconia-finalization-plan]]): fold ALL S19+S20 changes (6.6.99 module
    set, serdev/hci_uart config, `dsp_driver=1` cmdline, GPIO_CRYSTAL_COVE=y + i915 patch, grub default=1, vmlinuz

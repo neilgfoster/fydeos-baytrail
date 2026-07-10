@@ -81,9 +81,12 @@ Abandoned 6.6.76 (grub `default=1` → R144; 6.6.76 tree removed). Restored 4 of
 | Backlight / brightness | ❌ | ✅ **fixed** | **vmlinuz rebuild:** `CONFIG_GPIO_CRYSTAL_COVE=y` built-in + new patch `patches/i915-dsi-pmic-gpio-defer-retry.patch` (i915 retries panel `gpiod_get` on `-EPROBE_DEFER`; gpio_crystalcove registers ~3ms after i915 probes). `intel_backlight` present; manual + ALS auto-adjust confirmed. |
 | Bluetooth | ❌ | ✅ **fixed (S20)** | hci0 UP RUNNING (first time ever). Needed vmlinuz rebuild (#4): `SERIAL_DEV_BUS=y`+`SERIAL_DEV_CTRL_TTYPORT=y` (serdev core) + `SERIAL_8250_DW=m` (DW UART `80860F0A`→`ttyS0`) + `BT_HCIUART`/`_BCM`/`_SERDEV`=m. `BCM2E3F` binds `hci_uart_bcm`→BCM4324B3; Floss `btadapterd --hci=0` adopts it. SCO-routing patch already in tree. patchRAM `.hcd` unloaded (ROM ok). |
 
-Current kernel = R144 build **#3** (backlight patch), vermagic `6.6.99-g7232af57f054` (unchanged → `=m`
-modules still match). Boots 6.6.99 by default with WiFi/SSH. NEXT: Bluetooth, then re-apply memtune + bake
-for reproducibility. ARC is a separate unresolved track (S18).
+| Battery % / AC bolt | ⚠️ works | ⚠️ **FROZEN — known limitation** | i2c-0 EC transfers time out on 6.6.99 ("timeout waiting for bus ready") → ACPI BATC/ADP1 read stale (correct once at boot then frozen; plugged shows "Discharging"). NOT the S13 GPE storm (storm gone; `ignore_interrupt` flag still works). Bisected S20: whole EC/i2c/LPSS/DMA source is byte-identical 6.6.76↔6.6.99; no `_SEM` in DSDT (P-Unit semaphore never engaged on either); not Crystal Cove (i2c-6). Emergent regression, not diff-localizable; true git-bisect blocked by per-commit vermagic. **Accepted** — device otherwise fully functional. See memory `iconia-ac-gpe-storm`. |
+
+Current kernel = R144 build **#4** (backlight i915 patch + S20 serdev/BT), vermagic `6.6.99-g7232af57f054`
+(unchanged → `=m` modules still match). Boots 6.6.99 by default with WiFi/SSH. All 5 regressed drivers
+restored (buttons/audio/rotate/backlight/BT). Battery/AC indicator is an accepted 6.6.99 limitation (above).
+NEXT: close the finalization/bake gap. ARC is a separate unresolved track (S18).
 
 ## Fix-location legend
 

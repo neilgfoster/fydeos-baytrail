@@ -68,6 +68,23 @@ hid-sensor-accel-3d, backlight, BT) are absent. **Rebuild the 6.6.99 module set 
 6.6.76 driver config (port the `=m` set), redeploy → restores buttons+audio+rotate+backlight+BT
 in one shot.** Then re-apply/bake the live tweaks (memtune). See PROGRESS S18 next-session plan.
 
+## Session 19 (2026-07-09) — committed to 6.6.99; 4/5 regressions FIXED
+
+Abandoned 6.6.76 (grub `default=1` → R144; 6.6.76 tree removed). Restored 4 of the 5 S18 regressions on
+6.6.99. Full recipe: memory `iconia-6699-driver-restore` + PROGRESS S19.
+
+| Subsystem | S18 (6.6.99) | **S19 (6.6.99)** | Fix |
+| --- | --- | --- | --- |
+| Hardware buttons | ❌ | ✅ **fixed** | built `soc_button_array` (`CONFIG_INPUT_SOC_BUTTON_ARRAY=m`). IRQs fire; power works. |
+| Audio | ❌ | ✅ **fixed** | built RT5640 + bytcr mach (+RL6231) `=m` + cmdline `snd_intel_dspcfg.dsp_driver=1` (force legacy SST); fw `.xz` + UCM already present → `card 0`, sound + volume OSD. |
+| Auto-rotate | ❌ | ✅ **fixed** | built full HID-sensor set (`HID_SENSOR_*=m`); S12 rotation patch already in tree → screen rotates in tablet mode. |
+| Backlight / brightness | ❌ | ✅ **fixed** | **vmlinuz rebuild:** `CONFIG_GPIO_CRYSTAL_COVE=y` built-in + new patch `patches/i915-dsi-pmic-gpio-defer-retry.patch` (i915 retries panel `gpiod_get` on `-EPROBE_DEFER`; gpio_crystalcove registers ~3ms after i915 probes). `intel_backlight` present; manual + ALS auto-adjust confirmed. |
+| Bluetooth | ❌ | ⬜ **TODO** | build `hci_uart` + `btbcm` `=m`; serdev bind + `.hcd`. Last remaining regression. |
+
+Current kernel = R144 build **#3** (backlight patch), vermagic `6.6.99-g7232af57f054` (unchanged → `=m`
+modules still match). Boots 6.6.99 by default with WiFi/SSH. NEXT: Bluetooth, then re-apply memtune + bake
+for reproducibility. ARC is a separate unresolved track (S18).
+
 ## Fix-location legend
 
 - **kernel** — `CONFIG_*` change → rebuild `chromeos-kernel-6_6` → re-inject `vmlinuz`

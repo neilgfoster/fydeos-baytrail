@@ -1,0 +1,36 @@
+diff --git a/drivers/gpu/drm/i915/display/intel_dsi_vbt.c b/drivers/gpu/drm/i915/display/intel_dsi_vbt.c
+index e56ec3f2d..f9705c7e9 100644
+--- a/drivers/gpu/drm/i915/display/intel_dsi_vbt.c
++++ b/drivers/gpu/drm/i915/display/intel_dsi_vbt.c
+@@ -24,6 +24,7 @@
+  *
+  */
+ 
++#include <linux/delay.h>
+ #include <linux/gpio/consumer.h>
+ #include <linux/gpio/machine.h>
+ #include <linux/mfd/intel_soc_pmic.h>
+@@ -991,7 +992,22 @@ void intel_dsi_vbt_gpio_init(struct intel_dsi *intel_dsi, bool panel_is_on)
+ 	}
+ 
+ 	if (want_panel_gpio) {
+-		intel_dsi->gpio_panel = gpiod_get(dev->dev, "panel", flags);
++		/*
++		 * Iconia W4-820: the PMIC "gpio_crystalcove" chip is created a
++		 * few ms after i915 probes (i2c->PMIC->mfd->gpio chain), so the
++		 * first gpiod_get() returns -EPROBE_DEFER. i915 can't defer this
++		 * deep in modeset init, so retry briefly instead of giving up
++		 * (which left /sys/class/backlight empty). ~3ms in practice.
++		 */
++		int retries = 50;
++
++		do {
++			intel_dsi->gpio_panel = gpiod_get(dev->dev, "panel", flags);
++			if (!IS_ERR(intel_dsi->gpio_panel) ||
++			    PTR_ERR(intel_dsi->gpio_panel) != -EPROBE_DEFER)
++				break;
++			msleep(10);
++		} while (--retries);
+ 		if (IS_ERR(intel_dsi->gpio_panel)) {
+ 			drm_err(&dev_priv->drm,
+ 				"Failed to own gpio for panel control\n");

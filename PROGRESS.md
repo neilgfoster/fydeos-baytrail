@@ -4,6 +4,55 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## Session 19 (2026-07-09) — COMMITTED to 6.6.99; 4/5 regressed drivers restored (only Bluetooth left)
+
+**TL;DR:** Decided to abandon 6.6.76 and run **6.6.99/R144 as the sole daily-driver kernel**. Removed 6.6.76
+entirely, made grub boot 6.6.99 by default, then restored **4 of the 5 subsystems** that regressed on 6.6.99
+(they'd regressed because the R144 module set was built from the minimal `working.config`). Only **Bluetooth**
+remains. Full recipe + build/deploy loop is in memory `iconia-6699-driver-restore`.
+
+**Decisions & actions:**
+1. **6.6.99 is now the only kernel.** grub `/boot/grub/grub.cfg` set `default=1` (the "FydeOS R144" entry =
+   `vmlinuz.r144`). Deleted the 6.6.76 module tree (rootfs symlink + stateful copy, ~200M reclaimed);
+   `vmlinuz.A` (6.6.76) stays on ESP only as the grub **search anchor** (its modules are gone, so it won't
+   boot). Fallback is now USB recovery, not 6.6.76.
+2. **Fast workflow discovered:** Crostini build container **CAN ssh the tablet directly**
+   (`ssh -i ~/.ssh/iconia_ed25519 root@192.168.1.31`) — build locally + deploy over SSH from one shell, no
+   crosh-host hop. (Corrected the old "Crostini can't reach the LAN" note.)
+3. **Drivers restored (each: enable `=m` symbol in `~/openfyde/kernel-r144`, build, gzip, scp, depmod, reboot):**
+   - ✅ **hardware buttons** — `CONFIG_INPUT_SOC_BUTTON_ARRAY=m`.
+   - ✅ **audio** — `CONFIG_SND_SOC_RT5640=m` + `CONFIG_SND_SOC_INTEL_BYTCR_RT5640_MACH=m` (+ RL6231),
+     **plus** cmdline `snd_intel_dspcfg.dsp_driver=1` on the R144 entry (force legacy SST over flaky SOF).
+     Firmware `fw_sst_0f28.bin.xz` + `bytcr-rt5640` UCM already on device. → `card 0`, sound + volume OSD.
+   - ✅ **auto-rotate** — full HID-sensor set (`HID_SENSOR_HUB/_IIO_COMMON/_IIO_TRIGGER/_ACCEL_3D/
+     _DEVICE_ROTATION/_ALS`+gyro/magn); S12 rotation patch was already applied in the tree. → screen rotates.
+   - ✅ **backlight** — THE HARD ONE, needed a **vmlinuz rebuild + source patch**: `CONFIG_GPIO_CRYSTAL_COVE=y`
+     built-in AND new patch `patches/i915-dsi-pmic-gpio-defer-retry.patch` (i915 retries the panel `gpiod_get`
+     on `-EPROBE_DEFER` — the CrystalCove gpio registers ~3ms after i915 probes; i915 otherwise gives up and
+     never retries). Keep `DRM_I915=y`. → `/sys/class/backlight/intel_backlight`; brightness + ALS auto-adjust
+     confirmed working.
+4. **ESP mgmt:** p12 is only 32M. Freed space by moving `vmlinuz.A.bak-bt` + the pre-backlight `vmlinuz.r144`
+   to `/mnt/stateful_partition/unencrypted/iconia-esp-backup/`. Deploy kernels via scp→`.new`→sha-verify→atomic
+   `mv`. Current on-ESP `vmlinuz.r144` = build **#3** (backlight patch). vermagic stayed `6.6.99-g7232af57f054`
+   throughout, so all `=m` modules remain compatible with the rebuilt vmlinuz.
+
+**Current state:** tablet boots 6.6.99 unattended with WiFi/SSH; buttons, audio, auto-rotate, backlight all
+working. Kernel = R144 build #3 (i915 backlight patch). Live tweaks NOT yet re-applied (memtune). ARC still
+unfixed/unaddressed this session (separate track — see S18; run_oci #GP minidump still to decode).
+
+### NEXT SESSION — priority order
+1. **Bluetooth (last regression):** build `hci_uart` + `btbcm` (`CONFIG_BT_HCIUART*`, `CONFIG_BT_BCM`) for
+   6.6.99, deploy modules; serdev bind + `.hcd` firmware per existing BT notes. Module-only, same loop as
+   buttons/audio/rotate.
+2. **Re-apply live tweaks:** `iconia-memtune` (zstd + swappiness 100 + min_free) on 6.6.99; verify rotto tweaks.
+3. **Close the finalization/bake gap** ([[iconia-finalization-plan]]): fold all S19 changes (the 6.6.99 module
+   set, `dsp_driver=1` cmdline, GPIO_CRYSTAL_COVE=y + i915 patch vmlinuz, grub default=1) into a reproducible
+   wipe→USB→working install. Consider committing this session's repo changes (new patch + any config deltas).
+4. **(Separate track) ARC:** decode the `run_oci` `#GP` minidump — decide if ARC is achievable on Bay Trail
+   at all (see S18 notes). Independent of the driver-restore work above.
+
+**Resume quickly:** memory `iconia-6699-driver-restore` has the exact symbols, module paths, and gotchas.
+
 ## Session 18 (2026-07-09) — WiFi-on-6.6.99 FIXED; tablet now runs R144; ARC skew theory DISPROVEN
 
 **TL;DR:** The tablet now boots and runs on the **version-matched 6.6.99-g7232af57f054 (R144)** kernel

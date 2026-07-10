@@ -4,7 +4,55 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
-## Session 20 (2026-07-10) — END STATE (resume here)
+## Session 22 (2026-07-10) — END STATE (resume here)
+
+**Device: fully functional daily driver on 6.6.99/R144, now with ARC++ + real alt-syscall confinement.**
+Running kernel = **build #9** (vermagic `6.6.99-g7232af57f054`, ESP `/syslinux/vmlinuz.A` sha `671cd8f173044a6f`,
+grub `default=0`; rollback entry = `vmlinuz.r144` = pre-alt-syscall #4/#5). Verified working: WiFi/SSH, BT hci0,
+`intel_backlight`, audio (bytcrrt5640), **auto-rotate**, buttons, crosh, and **ARC++ booting to `system_server`
+WITH `altSyscall:"android"` confinement, 0 run_oci faults, apps launch**.
+
+### ✅ MAJOR: ARC++ fixed (Path B — kernel with alt-syscall)
+- **Root cause (S22):** the "`run_oci` general protection fault in libc" was a RED HERRING — it's glibc
+  `abort()`'s `hlt` backstop. Real cause: `minijail_enter()` calls `prctl(PR_ALT_SYSCALL,"android")` which the
+  custom kernel rejected → die()→abort(). The kernel lacked **ChromeOS alt-syscall**. See [[iconia-android-arc-diag]].
+- **Systematic finding:** neil's kernel was built from **upstream chromiumos** (`chromium.googlesource.com/
+  chromiumos/third_party/kernel`, no fyde patches) with a hand-rolled 2455-line minimal `.config`, bypassing
+  openFyde's ebuild. Missing the whole fyde patch set. See [[iconia-kernel-wrong-repo]].
+- **Fix built + deployed:** applied the openFyde `project-openfyde-patches/sys-kernel/chromeos-kernel-6_6`
+  patch set (esp. `063-altcall.patch`) to `~/openfyde/kernel-r144`; hand-ported alt-syscall to the newer x86
+  syscall rework (common.c #ifdef CONFIG_ALT_SYSCALL, re-added ia32_sys_call_table[], syscall.h extern,
+  __maybe_unused sysctl); enabled `CONFIG_ALT_SYSCALL[_CHROMIUMOS]=y`; re-integrated neil's 6 device patches
+  from stash. Built **bzImage #9 + 383 modules**, guarded-reflashed to ESP `vmlinuz.A` (hash-verified, rollback
+  kept). Reverted the test-A config workaround → ARC runs WITH confinement.
+- **Rotate regression fix:** fyde `001-hid-sensor-cros-compat` conflicts with neil's `hid-sensor-accel-3d`
+  rotate patch (re-routes accel to cros-ec-accel, breaks rotation). Reverted 001, modules-only redeploy (no
+  reflash — bzImage unchanged). Rotation confirmed working.
+
+### ✅ Cameras — exhaustively investigated, DEFINITIVE dead end (see [[iconia-cameras-dead-end]])
+NOT achievable. TRUE root cause (reverse-engineered the actual Windows driver): the Bay Trail ISP on this SKU
+is a **graphics-subsystem child device** (`VIDEO\…DEV_0F31…INT0F38`, under GPU 00:02.0), NOT a PCI device — it
+is never at PCI `00:03.0`, not even under Windows. Windows accesses it via IOSF power (ISPSSPM0) + BIOS-reserved
+MMIO + CSS firmware. Linux `atomisp` only supports the PCI-00:03.0 model → can never bind. We DID: power the
+IUNIT from Linux (isp_probe.ko), extract the CSS firmware (`isp_firmware.bin`), extract the BIOS IFR (no ISP
+setting exists), add `efivarfs`. Enabling would need a whole new non-PCI driver + CSS port + HAL (research-grade).
+
+### 🔴 OPEN BUG: recurring desktop freeze (see [[iconia-desktop-freeze]])
+Hard hang at desktop with screen ON (distinct from idle black-screen), recurring, predates #9. Needs
+netconsole/pstore + lockup detector to catch the trace. Also chase [[iconia-ac-gpe-storm]] correlation.
+
+### ▶ NEXT SESSION FOCUS: MICROPHONES
+Get the microphone(s) working. Bay Trail tablet uses the RT5640 codec (audio playback works: `card0
+bytcrrt5640`), so the DMIC/analog-mic capture path is the target. Resume plan:
+- Check capture devices: `arecord -l`, `arecord -L`, the RT5640 UCM capture path, `amixer -c0` for mic/DMIC
+  mixer controls (IN1/IN3/DMIC gates), and whether ChromeOS CRAS sees an input node.
+- Bay Trail DMIC often needs the right SSP/DMIC routing in the sof/atom topology + UCM `HiFi`/`mic` verbs.
+- Verify with `arecord -f cd -d3 test.wav` then playback; check CRAS `cras_test_client --dump_audio_thread`.
+- Tools: SSH root@192.168.1.31 (key `~/.ssh/iconia_ed25519`), same build/deploy flow as ARC.
+
+---
+
+## Session 20 (2026-07-10) — END STATE
 
 **Device: fully functional daily driver on 6.6.99/R144 build #4** (vermagic `6.6.99-g7232af57f054`, on-ESP sha
 `41b1d1a4…`). Verified working at session end: WiFi (wlan0) + SSH, backlight (`intel_backlight`, ALS auto),

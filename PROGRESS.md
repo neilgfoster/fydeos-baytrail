@@ -18,11 +18,32 @@ re-assessed (done). **Accepted limitation:** battery/AC indicator frozen on 6.6.
 not diff-localizable — see memory `iconia-ac-gpe-storm`).
 
 **FRESH NEXT STEPS (nothing half-done):**
-1. **Finalization/bake gap** ([[iconia-finalization-plan]]) — fold all S19/S20 live changes (6.6.99 module set,
+1. **[RESOLVED 2026-07-10, build #5] Black screen after long idle — intermittent `intel_backlight` registration race.**
+   FIX SHIPPED: `patches/i915-dsi-backlight-eprobe-defer-retry.patch` makes `ext_pwm_setup_backlight()` poll
+   up to 1s (20×50ms) on `-EPROBE_DEFER` instead of fatally bailing. Built vmlinuz #5 (sha `b0ffc5fc…`,
+   vermagic unchanged so modules compatible), deployed to ESP p12 `/syslinux/vmlinuz.r144` (build #4 backed up
+   as `vmlinuz.r144.build4-backlight`). Validated: `intel_backlight` PRESENT on card0-DSI-1 across multiple
+   reboots (was intermittent before), `backlight_tool` reads brightness, powerd logs zero "Failed to
+   initialize display backlight". Option-2 powerd screen-off guard NOT needed. Original triage below for record:
+   Root cause: on build #4, i915 (built-in) sometimes sets up the DSI connector backlight
+   before the built-in Crystal Cove PWM chip (`crystal_cove_pwm`) has registered → i915 gets `-EPROBE_DEFER`,
+   does NOT retry, and registers card0-DSI-1 with **no backlight** → `/sys/class/backlight` empty → powerd logs
+   `Failed to initialize display backlight` and can't drive the panel. After the idle screen-off timeout
+   (`unplugged_off_ms=330000` ≈5.5 min) powerd DPMS-blanks the DSI panel; with no backlight device the PWM is
+   never re-lit → permanent black screen (device stays alive; `disable_idle_suspend=1` so it never truly
+   suspends). Intermittent: worked 2026-07-04 (messages.5 shows `backlight intel_backlight` under card0-DSI-1),
+   failed on the 2026-07-10 boot. NOT a module race — i915/i2c_designware/intel_soc_pmic_crc/crystal_cove_pwm
+   are all built-in; it's a built-in initcall ordering race. **Ruled out:** power button + kernel s2idle
+   suspend/resume both work (RTC-armless `echo freeze` test woke via power button IRQ 144, i915 resumed 0 in
+   430ms, backlight state restored). **DECIDED FIX (option 1):** kernel patch for build #5 — make i915 DSI
+   backlight setup tolerate EPROBE_DEFER (retry), or force `crystal_cove_pwm` to register before i915 probes
+   the connector (initcall/link order). Interim guard (option 2, not yet applied): boot service that disables
+   powerd screen-off when `/sys/class/backlight` is empty. See memory [[iconia-backlight-probe-race]].
+3. **Finalization/bake gap** ([[iconia-finalization-plan]]) — fold all S19/S20 live changes (6.6.99 module set,
    vmlinuz #4 = GPIO_CRYSTAL_COVE=y + i915 DSI patch + serdev/BT, grub cmdline `dsp_driver=1` +
    `ignore_interrupt`, `config/bluetooth-uart.config`, upstart jobs) into a reproducible wipe→USB→working install.
-2. **(Separate track) ARC** — decode the `run_oci` `#GP` minidump (S18); may be unachievable on Bay Trail.
-3. Optional/low-priority: BT patchRAM `.hcd` (only if pairing proves flaky); drop HS200 quirk; ARC.
+4. **(Separate track) ARC** — decode the `run_oci` `#GP` minidump (S18); may be unachievable on Bay Trail.
+5. Optional/low-priority: BT patchRAM `.hcd` (only if pairing proves flaky); drop HS200 quirk; ARC.
 
 ---
 

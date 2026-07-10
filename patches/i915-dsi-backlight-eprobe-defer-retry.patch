@@ -1,0 +1,58 @@
+diff --git a/drivers/gpu/drm/i915/display/intel_backlight.c b/drivers/gpu/drm/i915/display/intel_backlight.c
+index 23fd011b6..115740110 100644
+--- a/drivers/gpu/drm/i915/display/intel_backlight.c
++++ b/drivers/gpu/drm/i915/display/intel_backlight.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include <linux/backlight.h>
++#include <linux/delay.h>
+ #include <linux/kernel.h>
+ #include <linux/pwm.h>
+ #include <linux/string_helpers.h>
+@@ -1515,6 +1516,32 @@ cnp_setup_backlight(struct intel_connector *connector, enum pipe unused)
+ 	return 0;
+ }
+ 
++/*
++ * The PMIC/SoC PWM chip that drives the DSI panel backlight (e.g. the built-in
++ * Crystal Cove PWM on Bay Trail) is a separate driver whose pwm lookup table may
++ * not be registered yet when i915 sets up the DSI backlight during modeset init.
++ * This runs from a display init path, not a driver-probe context, so a returned
++ * -EPROBE_DEFER cannot be propagated for the usual deferred-probe retry -- if we
++ * bail here the panel registers with no backlight and powerd can never light it
++ * again after a DPMS-off (black-screen-after-idle). Poll briefly for the provider
++ * to appear instead. See iconia PROGRESS "intel_backlight registration race".
++ */
++static struct pwm_device *ext_pwm_get_wait(struct drm_i915_private *i915,
++					   const char *name)
++{
++	struct pwm_device *pwm;
++	int i;
++
++	for (i = 0; i < 20; i++) {
++		pwm = pwm_get(i915->drm.dev, name);
++		if (!IS_ERR(pwm) || PTR_ERR(pwm) != -EPROBE_DEFER)
++			return pwm;
++		msleep(50);
++	}
++
++	return pwm;
++}
++
+ static int ext_pwm_setup_backlight(struct intel_connector *connector,
+ 				   enum pipe pipe)
+ {
+@@ -1525,10 +1552,10 @@ static int ext_pwm_setup_backlight(struct intel_connector *connector,
+ 
+ 	/* Get the right PWM chip for DSI backlight according to VBT */
+ 	if (connector->panel.vbt.dsi.config->pwm_blc == PPS_BLC_PMIC) {
+-		panel->backlight.pwm = pwm_get(i915->drm.dev, "pwm_pmic_backlight");
++		panel->backlight.pwm = ext_pwm_get_wait(i915, "pwm_pmic_backlight");
+ 		desc = "PMIC";
+ 	} else {
+-		panel->backlight.pwm = pwm_get(i915->drm.dev, "pwm_soc_backlight");
++		panel->backlight.pwm = ext_pwm_get_wait(i915, "pwm_soc_backlight");
+ 		desc = "SoC";
+ 	}
+ 

@@ -79,7 +79,7 @@ Abandoned 6.6.76 (grub `default=1` → R144; 6.6.76 tree removed). Restored 4 of
 | Audio | ❌ | ✅ **fixed** | built RT5640 + bytcr mach (+RL6231) `=m` + cmdline `snd_intel_dspcfg.dsp_driver=1` (force legacy SST); fw `.xz` + UCM already present → `card 0`, sound + volume OSD. |
 | Auto-rotate | ❌ | ✅ **fixed** | built full HID-sensor set (`HID_SENSOR_*=m`); S12 rotation patch already in tree → screen rotates in tablet mode. |
 | Backlight / brightness | ❌ | ✅ **fixed** | **vmlinuz rebuild:** `CONFIG_GPIO_CRYSTAL_COVE=y` built-in + new patch `patches/i915-dsi-pmic-gpio-defer-retry.patch` (i915 retries panel `gpiod_get` on `-EPROBE_DEFER`; gpio_crystalcove registers ~3ms after i915 probes). `intel_backlight` present; manual + ALS auto-adjust confirmed. |
-| Bluetooth | ❌ | ⬜ **TODO** | build `hci_uart` + `btbcm` `=m`; serdev bind + `.hcd`. Last remaining regression. |
+| Bluetooth | ❌ | ✅ **fixed (S20)** | hci0 UP RUNNING (first time ever). Needed vmlinuz rebuild (#4): `SERIAL_DEV_BUS=y`+`SERIAL_DEV_CTRL_TTYPORT=y` (serdev core) + `SERIAL_8250_DW=m` (DW UART `80860F0A`→`ttyS0`) + `BT_HCIUART`/`_BCM`/`_SERDEV`=m. `BCM2E3F` binds `hci_uart_bcm`→BCM4324B3; Floss `btadapterd --hci=0` adopts it. SCO-routing patch already in tree. patchRAM `.hcd` unloaded (ROM ok). |
 
 Current kernel = R144 build **#3** (backlight patch), vermagic `6.6.99-g7232af57f054` (unchanged → `=m`
 modules still match). Boots 6.6.99 by default with WiFi/SSH. NEXT: Bluetooth, then re-apply memtune + bake

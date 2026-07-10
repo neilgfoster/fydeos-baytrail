@@ -4,6 +4,41 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
+## Session 20 (2026-07-10) — Bluetooth FIXED → ALL 5 regressed drivers restored (hci0 up for the first time ever)
+
+**TL;DR:** Bluetooth now works — `hci0 UP RUNNING`, controller **BCM4324B3**, and the FydeOS **Floss** stack
+(`btmanagerd` + `btadapterd --index=0 --hci=0`) has adopted the adapter. This is the **first time hci0 has
+ever come up** on this tablet (it was "partial/no hci0" all the way back on 6.6.76). That closes the last of
+the 5 subsystems that regressed on the minimal-config 6.6.99 build.
+
+**Root cause (why BT never worked, not just a regression):** the BCM BT is on the **UART** (ACPI `BCM2E3F`,
+serdev child of the DW-APB UART `80860F0A`). Without a **serdev** host, that ACPI node had nothing to bind to,
+so `btbcm` loaded but no controller was ever instantiated. Fix required enabling serdev — which is a **bool
+(`=y`) built-in**, so it needed a **vmlinuz rebuild** (→ R144 build **#4**), not just modules:
+- `CONFIG_SERIAL_DEV_BUS=y` + `CONFIG_SERIAL_DEV_CTRL_TTYPORT=y` — serdev bus + tty→serdev controller (built-in).
+- `CONFIG_SERIAL_8250_DW=m` (`8250_dw.ko`) — Bay Trail LPSS DW-APB UART host → `ttyS0`/`serial0`.
+- `CONFIG_BT_HCIUART=m` (+ `_BCM=y`, `_SERDEV=y`, `_H4=y`) → `hci_uart.ko`; `CONFIG_BT_BCM=m` (`btbcm.ko`).
+Result: `BCM2E3F:00` binds `hci_uart_bcm` over `serial0` → BCM4324B3 (chip id 84) → hci0. The saved
+`patches/bt-sco-transport-routing.patch` (force SCO→HCI transport for BCM2E3F) was already applied in the tree
+and fired at probe. vermagic unchanged (`6.6.99-g7232af57f054`) so all `=m` modules stay compatible.
+
+**Deploy:** modules (`hci_uart`, `btbcm`, `8250_dw`) gzipped→scp→`/lib/modules/.../{bluetooth,tty/serial/8250}/`
+→`depmod`. vmlinuz #4→ESP p12 via `.new`→sha-verify→atomic `mv` (build #3 backed up to
+`stateful/.../iconia-esp-backup/vmlinuz.r144.bak-build3`). Rebooted → validated over SSH.
+
+**Not done / notes:** patchRAM `.hcd` NOT loaded — btbcm requests `brcm/BCM4324B3.hcd`, device only carries the
+USB-VID-named `BCM-0bb4-0306.hcd.xz` (unverified match), controller runs fine on ROM → left alone. Optional
+future fix only if real pairing proves unstable. Full recipe in memory `iconia-6699-driver-restore`.
+
+### NEXT SESSION — priority order
+1. **User validation:** pair a real BT device via FydeOS Settings UI (radio + Floss confirmed at OS level; only
+   end-to-end pairing/audio unproven). If pairing is flaky, try the `.hcd` symlink (see notes above).
+2. **Re-apply live tweaks:** `iconia-memtune` (zstd + swappiness 100 + min_free) on 6.6.99.
+3. **Close the finalization/bake gap** ([[iconia-finalization-plan]]): fold ALL S19+S20 changes (6.6.99 module
+   set, serdev/hci_uart config, `dsp_driver=1` cmdline, GPIO_CRYSTAL_COVE=y + i915 patch, grub default=1, vmlinuz
+   #4) into a reproducible wipe→USB→working install.
+4. **(Separate track) ARC:** decode the `run_oci` `#GP` minidump (S18).
+
 ## Session 19 (2026-07-09) — COMMITTED to 6.6.99; 4/5 regressed drivers restored (only Bluetooth left)
 
 **TL;DR:** Decided to abandon 6.6.76 and run **6.6.99/R144 as the sole daily-driver kernel**. Removed 6.6.76

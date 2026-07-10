@@ -36,6 +36,12 @@ is never at PCI `00:03.0`, not even under Windows. Windows accesses it via IOSF 
 MMIO + CSS firmware. Linux `atomisp` only supports the PCI-00:03.0 model → can never bind. We DID: power the
 IUNIT from Linux (isp_probe.ko), extract the CSS firmware (`isp_firmware.bin`), extract the BIOS IFR (no ISP
 setting exists), add `efivarfs`. Enabling would need a whole new non-PCI driver + CSS port + HAL (research-grade).
+**Every workaround angle exhausted (S22):** libcamera softISP (no BayTrail CSI-rx driver), runtime ISP→PCI
+mode switch (boot-time FSP UPD only, no register/EFI lever — dumped all 65 UEFI vars, no ISP setting), run
+Windows driver on Linux (NDISwrapper=network-only; no AVStream wrapper; camera.sys is a graphics-KMD child),
+and GPU-driver route (i915 has zero ISP code; "GPU child" = shared IRQ + PnP tree only, ISP has own MMIO).
+Only theoretical route = firmware flash to PCI mode → mainline atomisp + extracted CSS fw (brick risk, not
+worth it). Assets kept: `~/openfyde/iconia-s22-artifacts/` (isp_firmware.bin CSS fw, camera.sys/inf, patches).
 
 ### 🔴 OPEN BUG: recurring desktop freeze (see [[iconia-desktop-freeze]])
 Hard hang at desktop with screen ON (distinct from idle black-screen), recurring, predates #9. Needs

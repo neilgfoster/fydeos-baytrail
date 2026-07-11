@@ -8,6 +8,132 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
+## ThinkPad 10 20C1 — Session T3 (2026-07-12) — END STATE (resume here)
+
+**Phase 1 read-only probing DONE — full hardware/firmware dossier gathered over SSH
+channel #1. No disk/boot changes. One finding overturns the prior plan (Secure Boot).**
+
+### 🔴 Plan-changing findings
+- **SECURE BOOT IS *ON*** (`Confirm-SecureBootUEFI = True`) — this CORRECTS the T1 note
+  that said "Secure Boot off". Firmware will refuse any unsigned EFI binary, so the old
+  Phase-2 plan (stage our own UEFI Shell / GRUB `shellx64.efi` on the eMMC ESP and
+  chainload) **cannot launch as-is**. Secure Boot can only be toggled in **firmware setup**
+  (not from the OS). **NEXT ACTION (in progress): user disabling Secure Boot in BIOS**
+  (physical volume-button access at power-on; this does NOT endanger sshd — it's a firmware
+  toggle, WiFi/sshd come back on next boot). Alternative if that fails: MS-signed shim chain.
+- **Windows FAST STARTUP is ON** (`HiberbootEnabled=1`; box is Connected-Standby / S0ix
+  only, no S3). Shutdown leaves eMMC hibernated + NTFS not cleanly unmounted → any offline
+  /Linux access sees dirty NTFS + partially-locked disk. **Disable fast startup before any
+  offline disk work.**
+- **BitLocker present on C: but NOT protecting** — Used-Space-Only, 100% AES-128, but
+  **Protection OFF, Key Protectors None, Unlocked** (clear-key volume). Readable now, not a
+  lockout risk; just don't assume C: is plain NTFS.
+
+### Core facts (Phase-1 answers, all confirmed read-only)
+- **UEFI = 64-bit** (`bootmgfw.efi` PE machine-type `8664`). No ia32/EFI_MIXED trick needed.
+- **BIOS Lenovo GWET27WW v1.27** (2015-01-12). **CPU Atom Z3795** BayTrail-T 4C/4T 64-bit.
+  **4 GB** LPDDR3-1066 (2×2 GB). **TPM 2.0** enabled+activated. Model **20C10026UK**, SN
+  MP07C9P8, UUID D9C9DDE1-2696-11B2-89A8-D2706D77B24C. OS Win 8.1 Pro 9600 x64.
+- **eMMC = Disk 0, SanDisk SEM64G, 58 GB, GPT:** P1 ESP 260 MB FAT32 `SYSTEM_DRV`
+  (**212 MB free**; MS+Lenovo boot + `\EFI\Boot\bootx64.efi` + `LenovoBT.EFI`), P2 MSR
+  128 MB, P3 NTFS 48 GB `C:` Windows8_OS (**33 GB free**), P4 NTFS 9 GB `images` Lenovo
+  factory recovery (hidden, ~full).
+- **SD = Disk 1, "Generic SE64G", 59 GB — FULLY VISIBLE to Windows** as the 12-partition
+  ChromeOS installer clone (ESP = the 32 MB "System" part at 122 MB offset). Addressable
+  from Windows even though firmware won't boot it. Both eMMC & SD are on Intel BayTrail
+  **SDHCI** hosts (`ACPI\80860F14`) — exactly why firmware offers no SD boot entry.
+- **Networking:** Broadcom **SDIO WiFi** `SD\VID_02D0&PID_4324` (MAC C4:8E:8F:04:B5:73 =
+  SSH channel). **No wired NIC.** Sierra **EM7345 4G LTE** modem present (USB, disabled).
+- **Folio keyboard attached** (`USB\VID_17EF&PID_6062`, HID kbd+mouse on xHCI) → likely
+  have keyboard input at firmware/GRUB level to drive a boot menu.
+- **Firmware boot apps:** Setup, Boot Menu, System Recovery + Internal Storage / USB
+  HDD·CD·FDD / Network Adapter. No SD entry. PCI sparse (HD Gfx 0F31, TXE 0F18, xHCI 0F35,
+  host bridge, ISA bridge) — rest is ACPI/LPSS, normal for BayTrail.
+
+### DONE later in T3 — boot-medium probes (definitive)
+- **Secure Boot DISABLED** by user in BIOS setup → `Confirm-SecureBootUEFI = False`
+  (SetupMode=0, User Mode, keys still enrolled but enforcement off → unsigned EFI now runs).
+  sshd survived the firmware trip fine.
+- **Fast Startup DISABLED** (`powercfg /h off`; HiberbootEnabled=0; `powercfg /a` shows only
+  Connected Standby now). Shutdowns are clean; eMMC not left hibernated.
+- **USB PORT CONFIRMED DEAD (definitively).** With Secure Boot off + firm reseat, the FydeOS
+  installer stick STILL does not enumerate (no new Disk, no USB-attach event). xHCI
+  controller + root hub are healthy (`ConfigManagerErrorCode=0`) → it's the physical
+  port/traces, not the controller. USB is out as a boot/recovery channel, permanently.
+- **SD CARD FIRMWARE-INVISIBLE (definitively).** Staged `shellx64.efi` (pbatard 26H1, sha
+  `4ea080dd…`, PE machine 8664) on the eMMC ESP `S:\EFI\Shell\`, added a ONE-TIME
+  `{fwbootmgr} bootsequence` entry (Windows left default), rebooted into the UEFI Shell,
+  ran `map -r` → **only the eMMC appears** (all 4 GPT parts under
+  `PciRoot(0x0)/Pci(0x17,0x0)`); the SD reader's controller is never enumerated by
+  firmware. So: SD is not bootable AND the old "GRUB-on-eMMC chainloads installer off SD as
+  storage" fallback is ALSO dead (GRUB uses firmware block I/O + has no BayTrail SDHCI
+  driver). Temp boot entry deleted afterward → fwbootmgr back to pristine 6 entries, Windows
+  default. `shellx64.efi` left on ESP as a harmless recovery tool.
+
+### 🧭 STRATEGIC CONSEQUENCE (reshapes Phase 2)
+**No external boot medium exists — USB dead, SD firmware-invisible.** Any FydeOS install
+MUST be staged **entirely on the eMMC itself**. The stock ChromeOS installer is whole-disk
+destructive and cannot be used blindly. Likely path: shrink C: (33 GB free), stage the
+installer payload (KERN+ROOT, or a GRUB that loads the installer) into eMMC free space /
+a new partition, GRUB on the eMMC ESP boots it, installer targets the eMMC. **Because there
+is ZERO external recovery boot if an eMMC-staged boot fails, channel #2 (a Linux/recovery
+SSH proven IN PARALLEL) is now NON-NEGOTIABLE before Windows sshd or its disk is touched.**
+
+### 📐 DRAFT PHASE-2 PLAN (eMMC-only install, SSH-safe) — to refine next sessions
+Core constraint: no external boot medium (USB dead, SD firmware-invisible) → everything on
+the eMMC; the on-eMMC recovery partition + our GRUB is the ENTIRE safety net. Do NOT use the
+stock whole-disk installer. Prove-new-before-deprecating-old at every step.
+
+**Target eMMC partition map (58 GB, controlled — not stock wipe):**
+- P1  ESP (existing 260 MB, FAT32) — **we own GRUB here** (`\EFI\BOOT\BOOTX64.EFI` = our
+  GRUB); keep `shellx64.efi` staged too. GRUB config authoritative for what boots.
+- P?  **RECOVERY-LINUX (channel #2, NEW, ~2-4 GB)** — independent minimal Linux, read-only
+  rootfs, OUTSIDE ChromeOS's A/B set + never mounted by FydeOS. Baked in: sshd + admin
+  pubkey, brcmfmac + WiFi creds, fixed host key → auto-joins WiFi + sshd pre-login,
+  unattended, survives reboot. This is what makes SSH survive FydeOS updates/powerwash.
+- ChromeOS region (bounded, hand-placed — NOT whole-disk): KERN-A/B, ROOT-A/B, STATE, etc.
+  Placed into freed space (shrink C: → later reclaim Windows) rather than a stock GPT wipe.
+- Consider fate of the 9 GB Lenovo recovery (P4): reclaim for space, or keep early on.
+
+**SSH-survival hardening (answers "protect SSH even if FydeOS self-updates dodgily"):**
+1. Channel #2 recovery-Linux is independent of ChromeOS partitions → updates/powerwash can't
+   touch it. 2. **Disable FydeOS auto-update** (mask `update_engine`, as on W4-820) → no
+   self-update at all. 3. **We own the ESP/GRUB**; do NOT let ChromeOS postinst manage the
+   ESP (it can rewrite boot entries). 4. GRUB keeps a RECOVERY entry always; firmware Boot
+   Menu (volume buttons) is the physical last resort.
+
+**Mandatory sequence (never hand off blind):**
+1. Shrink C: (33 GB free) to free eMMC space — reversible, Windows + sshd intact.
+2. Create + populate RECOVERY-LINUX partition; install our GRUB to the ESP with entries for
+   Windows (default) + Recovery. Windows sshd STILL primary — nothing retired yet.
+3. **PROVE channel #2:** boot recovery-Linux, confirm `ssh` into it over WiFi works +
+   survives a reboot unattended, WHILE Windows sshd is still alive. Record as PROVEN in
+   CLAUDE.md (this is the line that finally lifts the hard rule).
+4. ONLY THEN: hand-place the ChromeOS partitions + install FydeOS to the eMMC region.
+   Recovery-Linux remains the fallback throughout.
+
+### ▶ NEXT SESSION — re-verify the dead USB from UEFI (rule out a firmware flag)
+Before committing to "no external boot medium", be 100% sure the USB port is truly physical,
+not a stuck/misconfigured firmware state. `shellx64.efi` is already staged on the ESP.
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Re-add the ONE-TIME `{fwbootmgr} bootsequence` entry for `S:\EFI\Shell\shellx64.efi`
+   (same as T3; Windows stays default), reboot into the UEFI Shell WITH the installer stick
+   plugged in.
+2. In the shell, get the FIRMWARE's own view of USB (independent of Windows drivers):
+   `devices`, `dh -p BlockIo`, `dh -p UsbIo`, `map -r` (does a USB FS/BLK appear?),
+   `pci` (find the xHCI 8086:0F35, check it's present/enabled), and `drivers` (is a USB/
+   xHCI driver bound?). Try with stick in different port states. Save output to
+   `FS0:\usbprobe.txt` for readback over SSH.
+3. If firmware ALSO sees nothing on the port → physical fault confirmed beyond doubt →
+   commit to the eMMC-only Phase-2 plan above. If firmware DOES see USB (Windows-only
+   blindness) → investigate a firmware/port toggle before going destructive.
+4. Delete the temp boot entry afterward (restore pristine fwbootmgr), as in T3.
+
+**State at session close:** Secure Boot OFF, Fast Startup OFF, firmware pristine (6 entries,
+Windows default), `shellx64.efi` staged on ESP, channel #1 healthy. No disk changes.
+
+---
+
 ## ThinkPad 10 20C1 — Session T2 (2026-07-12) — END STATE (resume here)
 
 **Achieved: remote admin access to the tablet, hardened + proven bulletproof, plus a

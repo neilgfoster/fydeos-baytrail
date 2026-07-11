@@ -1,10 +1,19 @@
 # fydeos-baytrail
 
-Boot and install **FydeOS / openFyde** on **64-bit-CPU + 32-bit-UEFI** tablets
-(Intel Bay Trail / Cherry Trail) by rebuilding the openFyde kernel with
-`CONFIG_EFI_MIXED` and injecting it into a stock FydeOS installer USB.
+Get **FydeOS / openFyde** running well on **Intel Bay Trail / Cherry Trail**
+tablets — booting *and* the long tail of hardware bring-up (Wi-Fi, audio, sensors,
+backlight, Bluetooth, power, ARC++). Works **regardless of UEFI bitness**:
 
-Multi-board: shared boot machinery, one directory per device under
+- **64-bit UEFI** (e.g. Lenovo ThinkPad 10): stock FydeOS boots directly — you skip
+  the boot fix and use this repo purely as the Bay Trail **hardware bring-up**
+  framework (playbook, diagnostics, per-board fix tracking, rootfs/cmdline/kernel
+  fixes).
+- **32-bit UEFI** (e.g. Acer Iconia W4-820): the firmware also can't boot a stock
+  64-bit installer, so this repo *additionally* rebuilds the openFyde kernel with
+  `CONFIG_EFI_MIXED` and injects it onto the USB. See
+  [the boot fix](#the-32-bit-uefi-boot-fix) below.
+
+Multi-board: shared machinery, one directory per device under
 [`boards/`](boards/).
 
 | Board | Status |
@@ -16,7 +25,26 @@ Starting a new Bay Trail tablet? Read the distilled
 [`docs/adding-a-board.md`](docs/adding-a-board.md). Copy
 [`boards/_template/`](boards/_template/) to `boards/<your-board-id>/`.
 
-## The problem in one paragraph
+## First step for any new board: does it boot stock?
+
+Write a **stock** FydeOS installer USB and try to boot it. That single test tells
+you which path you're on:
+
+- **It boots** → 64-bit UEFI. Install stock, then jump to
+  [Hardware bring-up](#hardware-bring-up).
+- **Firmware sees nothing bootable** → likely 32-bit UEFI. Apply
+  [the boot fix](#the-32-bit-uefi-boot-fix) first.
+
+> **CPU must be 64-bit either way.** A genuinely 32-bit CPU (e.g. Clover Trail
+> Z2760) can't run FydeOS's 64-bit kernel at all — `EFI_MIXED` fixes *firmware*
+> bitness, not CPU bitness.
+
+New device? → [`docs/adding-a-board.md`](docs/adding-a-board.md).
+W4-820 diagnostic trail → [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findings.md).
+
+## The 32-bit-UEFI boot fix
+
+*(Skip this whole section on 64-bit-UEFI boards — stock FydeOS already boots.)*
 
 These tablets have a **64-bit CPU** but a **32-bit-only UEFI firmware**. Stock
 FydeOS installer USBs ship a 64-bit GRUB (`bootx64.efi`) only, and — more
@@ -27,14 +55,7 @@ which lacks the **32-bit EFI handover entry point** (`XLF_EFI_HANDOVER_32`). Thi
 repo rebuilds the openFyde kernel with that entry point enabled and swaps it onto
 the installer USB.
 
-> **Not for genuinely 32-bit CPUs** (e.g. Clover Trail Z2760): a 64-bit FydeOS
-> kernel cannot run on them at all. `EFI_MIXED` is about firmware bitness, not CPU
-> bitness. See [`docs/adding-a-board.md`](docs/adding-a-board.md).
-
-New device? → [`docs/adding-a-board.md`](docs/adding-a-board.md).
-W4-820 diagnostic trail → [`boards/iconia-w4-820/findings.md`](boards/iconia-w4-820/findings.md).
-
-## Repeatable process
+### Boot-fix process (32-bit UEFI only)
 
 ```
 ┌─────────────────┐   ┌──────────────────┐   ┌───────────────────┐
@@ -64,19 +85,28 @@ board's directory under `boards/`.
    (re)installs `bootia32.efi` + a `gptpriority`-free `grub.cfg` so 32-bit
    firmware can boot the whole chain.
 
-### Hardware bring-up (after it boots)
+## Hardware bring-up
 
-The same rebuild pipeline addresses most Bay Trail hardware quirks (Wi-Fi, audio,
-touch, backlight, sensors). Track them per device in
+*Applies to every board, any UEFI bitness.*
+This is the bulk of the work and it's identical whether the firmware is 32- or
+64-bit — it's about the Bay Trail SoC and the FydeOS userland, not the bootloader.
+**Read [`docs/bay-trail-playbook.md`](docs/bay-trail-playbook.md) first**, probe
+with the shared [`diag/`](diag/) toolkit, and track results per device in
 `boards/<id>/hardware-status.md`. Fixes land in one of four places (see
-[`docs/hardware-status-legend.md`](docs/hardware-status-legend.md)): a **kernel**
-config fragment (`boards/<id>/config/`) or patch (`boards/<id>/patches/`) →
-rebuild; a **cmdline** tweak in the injected `grub.cfg` → no rebuild; or **rootfs**
-blobs (firmware / ALSA UCM) staged in `boards/<id>/stage/` via
-**`scripts/inject-rootfs.sh --board <id>`**. Firmware/ACPI/suspend bugs baked into
-the 32-bit UEFI are not kernel-fixable.
+[`docs/hardware-status-legend.md`](docs/hardware-status-legend.md)):
 
-## Quick check that a rebuild worked
+- **kernel** config fragment (`boards/<id>/config/`) or patch
+  (`boards/<id>/patches/`) → rebuild + re-inject `vmlinuz`. On 32-bit UEFI the
+  rebuild also carries `efi-mixed.config`; on 64-bit UEFI it doesn't, and you swap
+  the kernel on the existing `bootx64` chain (no `bootia32`/grub changes).
+- **cmdline** tweak in `grub.cfg` → no rebuild.
+- **rootfs** blobs (firmware / ALSA UCM) staged in `boards/<id>/stage/` via
+  **`scripts/inject-rootfs.sh --board <id>`** → no rebuild.
+
+Firmware/ACPI/suspend bugs baked into the UEFI itself are not kernel-fixable on
+either bitness.
+
+## Quick check that the boot fix worked (32-bit UEFI only)
 
 The single byte that matters is `xloadflags` at offset `0x236` of the kernel
 image. Bit `0x04` (`XLF_EFI_HANDOVER_32`) must be **set**:
@@ -100,15 +130,16 @@ boards/_template/           copy to start a new board (skeleton only)
 PROGRESS.md                 cross-session source of truth
 ```
 
-## Status (see PROGRESS.md for detail)
+## W4-820 boot-fix milestones (historical — see PROGRESS.md for detail)
 
-- [x] Diagnose: stock FydeOS kernel lacks `XLF_EFI_HANDOVER_32` (`0x2b`) — W4-820.
-- [x] 32-bit GRUB (`bootia32.efi`) boots on the W4-820 (reaches kernel handoff).
-- [x] Repo scaffolded + made multi-board; `inspect-usb.sh` run against real USB.
-- [x] openFyde build target pinned (R138 / r138-dev / amd64-openfyde_slim); sync running.
-- [ ] Build kernel with EFI_MIXED; verify `xloadflags`=`0x2f`.
-- [ ] `inject-kernel.sh` verified end-to-end on hardware.
-- [ ] Full install to eMMC (re-apply kernel to the eMMC ESP post-install).
+The 32-bit-UEFI boot fix, proven end-to-end on the Acer Iconia W4-820:
+
+- [x] Diagnose: stock FydeOS kernel lacks `XLF_EFI_HANDOVER_32` (`0x2b`).
+- [x] 32-bit GRUB (`bootia32.efi`) boots (reaches kernel handoff).
+- [x] Kernel rebuilt with `EFI_MIXED`; `xloadflags`=`0x2f` verified.
+- [x] `inject-kernel.sh` verified end-to-end on hardware.
+- [x] Full install to eMMC (kernel re-applied to the eMMC ESP post-install).
+- [x] Hardware fully brought up (Wi-Fi, audio, BT, sensors, backlight, ARC++, …).
 
 ## Caveats
 

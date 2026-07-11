@@ -130,16 +130,9 @@ boards/_template/           copy to start a new board (skeleton only)
 PROGRESS.md                 cross-session source of truth
 ```
 
-## W4-820 boot-fix milestones (historical — see PROGRESS.md for detail)
-
-The 32-bit-UEFI boot fix, proven end-to-end on the Acer Iconia W4-820:
-
-- [x] Diagnose: stock FydeOS kernel lacks `XLF_EFI_HANDOVER_32` (`0x2b`).
-- [x] 32-bit GRUB (`bootia32.efi`) boots (reaches kernel handoff).
-- [x] Kernel rebuilt with `EFI_MIXED`; `xloadflags`=`0x2f` verified.
-- [x] `inject-kernel.sh` verified end-to-end on hardware.
-- [x] Full install to eMMC (kernel re-applied to the eMMC ESP post-install).
-- [x] Hardware fully brought up (Wi-Fi, audio, BT, sensors, backlight, ARC++, …).
+Per-board status lives in the board table above and each board's
+`hardware-status.md`; the full session-by-session trail is in
+[`PROGRESS.md`](PROGRESS.md).
 
 ## Caveats
 

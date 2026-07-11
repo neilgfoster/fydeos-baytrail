@@ -4,7 +4,96 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
-## Session 22 (2026-07-10) — END STATE (resume here)
+## Session 24 (2026-07-11) — END STATE (resume here)
+
+**Focus: power button / sleep (the S23 next-focus item). RESULT: on-demand sleep now works.**
+All live via SSH (root@192.168.1.31, key `~/.ssh/iconia_ed25519`).
+
+### ✅ Sleep — mechanism fully characterised + on-demand gesture shipped
+- **Kernel s2idle suspend/resume WORKS** (verified via dmesg: clean `suspend entry (s2idle)` →
+  `resume from suspend-to-idle` → `suspend exit`; `suspend_stats` all success, 0 fail).
+  `mem_sleep=[s2idle]` only (no deep S3 on Bay Trail — expected).
+- **Wake = power button** (IRQ 146, `pm_system_irq_wakeup: 146 triggered power`) — 100% reliable.
+- **RTC wake is DEAD**: `/sys/class/rtc/rtc0/wakealarm` write → EACCES; `powerd_dbus_suspend
+  --suspend_for_sec` never self-wakes. So no timed auto-resume — power button is the only wake. Fine.
+- **Why "no way to sleep" originally**: pure userspace gap. Power button is captured by Chrome's tablet
+  power-menu (no "Sleep" entry); idle-suspend was disabled by dev-mode `disable_idle_suspend=1`.
+- **FIX (on-demand)**: extended `iconia-buttond.c` — **double-tap the Windows/home button → forks
+  `powerd_dbus_suspend --delay=1`** (normal ChromeOS suspend pipeline). Long-press→crosh and single-press
+  →home unchanged. Built static (`gcc -O2 -static`), deployed to `/usr/local/sbin/iconia-buttond`, conf
+  description updated in `/etc/init/iconia-buttond.conf`. **VALIDATED end-to-end** (debug trace: two ~150ms
+  taps → `FIRE (powerd_dbus_suspend)` → device slept → power-button wake → back to desktop, no re-auth).
+
+### ⚠️ idle-suspend re-enable — TRIED then ROLLED BACK (blocked on OSK-lockscreen bug)
+Set `/var/lib/power_manager/disable_idle_suspend=0` → powerd honoured it (idle action `no-op`→`suspend`).
+But on the **lock screen** ChromeOS applies a 30s-dim/40s-off/50s-lock policy, and combined with
+[[iconia-osk-lockscreen-broken]] an idle lock+suspend can strand the user at a password prompt with a
+dead OSK. Rolled back to `disable_idle_suspend=1`. **Idle auto-suspend must wait until the lock-screen OSK
+is fixed** (or lock-on-idle is disabled). The user-requested "both" is half-done: on-demand ✅, idle ⏸.
+
+### Bake items (finalization) — add to the list
+- New `iconia-buttond` binary (double-tap sleep) + updated `iconia-buttond.conf` description.
+- Do NOT bake `disable_idle_suspend=0` until OSK-lockscreen fixed.
+
+### ▶ NEXT SESSION FOCUS
+Fix the **lock-screen OSK** ([[iconia-osk-lockscreen-broken]]) — it's now the blocker for idle auto-suspend
+AND a standing lockout risk on a keyboard-less tablet. Once fixed, re-enable `disable_idle_suspend=0`.
+Then the remaining config backlog / finalization bake.
+
+---
+
+## Session 23 (2026-07-11) — END STATE
+
+**Device: fully functional daily driver on kernel #9 (legacy sst audio). Two long-standing bugs fixed +
+microphone now working. Playback preserved.** All fixes applied live via SSH (root@192.168.1.31, key
+`~/.ssh/iconia_ed25519`) and made durable; all flagged for the finalization bake.
+
+### ✅ Desktop freeze — ROOT-CAUSED + FIXED (see [[iconia-desktop-freeze]])
+The recurring hard-freeze-at-desktop-screen-ON was **eMMC I/O saturation from a `dlcservice` write storm**,
+NOT a kernel lockup. Chrome's ScreenAI feature requests the `screen-ai` DLC; install can never complete
+(`update-engine` is disabled on this build), so dlcservice loops verify→delete→recreate the image at
+**~20 MB/s** (its `write_bytes` hit **99 GB** in 55 min) → PSI I/O full-stall ~19% → frozen desktop.
+Confirmed: `stop dlcservice` → writes 0, PSI collapsed. **Fix:** immutable-file traps on
+`/var/cache/dlc/screen-ai` + `/var/lib/dlcservice/dlc/screen-ai` (`chattr +i` empty files) → install fails
+cheaply, no writes. Disabling ScreenAI in chrome_dev.conf did NOT stop it (ChromeOS requests the DLC anyway).
+
+### ✅ Log spam killed (see [[iconia-desktop-freeze]], [[iconia-ac-gpe-storm]])
+- screen-ai install-retry spam → rsyslog drop rule (`/etc/rsyslog.d/rsyslog.iconia-dlc-screenai.conf`).
+- The remaining churn was `i2c_designware ... timeout waiting for bus ready` — the wedged EC bus. Traced ~96%
+  of it to the **`iconia-acpoll` job** hammering the wedge-prone i2c-0 every 5s; on 6.6.99 that job is pure
+  overhead (EC reads broken anyway). **Disabled** via upstart `manual` override
+  `/etc/init/iconia-acpoll.override` → i2c spam 8.4/s → 0.3/s (25×). Keep acpoll on 6.6.76, disable on 6.6.99.
+
+### ⏸ i2c-0 EC regression bisect — PARKED (user)
+The underlying 6.6.99 EC-i2c battery/AC freeze is unchanged; the only untried lever is a 6-8h full-module
+git-bisect. Started scoping then parked at user request. See [[iconia-ac-gpe-storm]].
+
+### ✅ MICROPHONE — SOLVED (see [[iconia-next-session-mic]])
+Internal DMIC now captures end-to-end through CRAS (cold-boot validated: full 6s / 1.15 MB, full-scale on
+tap) **and playback still works** — both on the original **legacy sst** driver. Root cause: the DMIC capture
+route was never applied — the stock UCM routes the codec's dead **Mono-ADC** DMIC path and leaves **Stereo
+ADC2** off. Working route = **DMIC1 → Stereo ADC2** (`Stereo ADC2 Mux=DMIC1`, `Stereo ADC MIXL/R ADC2 on`,
+`ADC Capture Switch on`, `ADC Capture Volume 47`, `ADC Boost Gain 1`). **Fix deployed:**
+`/usr/local/sbin/iconia-mic-route.sh` + `/etc/init/iconia-mic-route.conf` (`start on started cras`, one-shot)
+apply the route at boot; added a `SectionDevice."Internal Mic"` to HiFi.conf. **Do NOT force SOF:** a long
+detour forced SOF (`dsp_driver=3`) which fixes mic but **breaks playback on this board** (user confirmed both
+PCM nodes silent; SOF logs "BYT-CR not detected") — reverted grub line 11 to `dsp_driver=1`. The early
+"legacy capture fails" reads that triggered the detour were bogus (CRAS had been manually stopped → 0-byte
+captures).
+
+### ▶ NEXT SESSION FOCUS: POWER BUTTON / SLEEP
+**The power button gives no way to sleep the device.** Pressing power does not suspend/sleep (and/or there's
+no working sleep path at all). Investigate: what the power button event does (evdev `KEY_POWER` →
+powerd/`power_manager`), whether short-press is mapped to suspend vs only shutdown, powerd prefs
+(`/usr/share/power_manager/`, `/var/lib/power_manager/`), and whether S3/S0ix suspend even works on this
+Bay Trail kernel (`/sys/power/state`, `mem_sleep`; test `echo mem > /sys/power/state`). Note the display/
+backlight idle-off path already works ([[iconia-backlight-probe-race]]) — this is about an explicit
+button-initiated sleep. Tools: SSH root@192.168.1.31 key `~/.ssh/iconia_ed25519`; buttond context in
+[[iconia-buttond-respawn-boot]]; physical button tests must pause+prompt ([[iconia-plug-test-prompts]]).
+
+---
+
+## Session 22 (2026-07-10) — END STATE
 
 **Device: fully functional daily driver on 6.6.99/R144, now with ARC++ + real alt-syscall confinement.**
 Running kernel = **build #9** (vermagic `6.6.99-g7232af57f054`, ESP `/syslinux/vmlinuz.A` sha `671cd8f173044a6f`,

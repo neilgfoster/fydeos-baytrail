@@ -1,13 +1,22 @@
-/* iconia-buttond.c — long-press the Windows/home button to open crosh.
+/* iconia-buttond.c — remap the Windows/home button.
  *
  * The soc_button_array driver emits KEY_LEFTMETA for the Windows button.
  * ChromeOS has no long-press remap, so this tiny daemon watches that evdev
- * node, times the KEY_LEFTMETA press, and on a long hold (>= HOLD_MS) injects
- * Ctrl+Alt+T via /dev/uinput — ChromeOS's "open crosh" shortcut.
+ * node and times the KEY_LEFTMETA press:
+ *   - long hold  (>= HOLD_MS)                 -> inject Ctrl+Alt+T (open crosh)
+ *   - double-tap (two short presses <= GAP)   -> ask powerd to suspend (sleep)
+ *
+ * The sleep gesture is our only user-facing way to sleep on demand: the tablet
+ * has no working RTC wake and Chrome's tablet power-menu offers no "Sleep", but
+ * kernel s2idle suspend/resume works and the power button reliably wakes it
+ * (S24). We shell out to powerd_dbus_suspend so suspend goes through the normal
+ * ChromeOS pipeline (suspend delays, dark-resume, lock policy), not a raw
+ * /sys/power/state write.
  *
  * We deliberately do NOT EVIOCGRAB the device: soc_button_array also carries
  * power + volume, and grabbing would swallow those (dangerous on power). So the
- * short press keeps its normal "home" action; the long press ADDS crosh.
+ * short press keeps its normal "home" action; the long press / double-tap ADD
+ * their actions.
  *
  * Build (static, so it runs on the libstdc++-less ChromeOS base):
  *   gcc -O2 -static -o iconia-buttond iconia-buttond.c
@@ -18,14 +27,19 @@
 #include <linux/input.h>
 #include <linux/uinput.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
-#define HOLD_MS 2000
+#define HOLD_MS 2000        /* long-press threshold -> crosh                */
+#define DOUBLE_GAP_MS 500   /* max gap between two short taps -> sleep      */
+
+#define POWERD_SUSPEND "/usr/bin/powerd_dbus_suspend"
 
 static long now_ms(void) {
     struct timespec ts;
@@ -94,6 +108,19 @@ static void emit(int fd, int type, int code, int val) {
     write(fd, &ev, sizeof ev);
 }
 
+/* Request a normal ChromeOS suspend. fork+exec so we never block the evdev
+ * read loop; SIGCHLD is ignored (see main) so the child is auto-reaped. */
+static void do_suspend(int dbg) {
+    if (dbg) fprintf(stderr, "buttond: FIRE (powerd_dbus_suspend)\n");
+    pid_t p = fork();
+    if (p == 0) {
+        /* --delay=1: keep our injected/close-in-time input from being read as
+         * user activity that immediately cancels the suspend request. */
+        execl(POWERD_SUSPEND, "powerd_dbus_suspend", "--delay=1", (char *)NULL);
+        _exit(127);
+    }
+}
+
 static void send_crosh(int u) {
     emit(u, EV_KEY, KEY_LEFTCTRL, 1);
     emit(u, EV_KEY, KEY_LEFTALT, 1);
@@ -112,10 +139,14 @@ int main(void) {
     if (bfd < 0) { fprintf(stderr, "no KEY_LEFTMETA device found\n"); return 1; }
     int ufd = make_uinput();
     if (ufd < 0) { fprintf(stderr, "cannot open /dev/uinput (module loaded?)\n"); return 1; }
-    if (dbg) fprintf(stderr, "buttond: watching fd, uinput ready, HOLD_MS=%d\n", HOLD_MS);
+    /* auto-reap the powerd_dbus_suspend children we fork on the sleep gesture */
+    signal(SIGCHLD, SIG_IGN);
+    if (dbg) fprintf(stderr, "buttond: watching fd, uinput ready, HOLD_MS=%d GAP=%d\n",
+                     HOLD_MS, DOUBLE_GAP_MS);
 
     struct input_event ev;
-    long press_ms = 0;   /* monotonic ms of the last KEY_LEFTMETA press */
+    long press_ms = 0;        /* monotonic ms of the last KEY_LEFTMETA press   */
+    long last_tap_ms = 0;     /* release time of the previous short tap        */
 
     /* Fire on RELEASE after a long-enough hold. We must NOT inject while the
      * button is held: the Windows button *is* KEY_LEFTMETA, so injecting
@@ -127,12 +158,19 @@ int main(void) {
             press_ms = now_ms();
             if (dbg) fprintf(stderr, "buttond: press\n");
         } else if (ev.value == 0 && press_ms) { /* release */
-            long held = now_ms() - press_ms;
+            long rel = now_ms();
+            long held = rel - press_ms;
             press_ms = 0;
             if (dbg) fprintf(stderr, "buttond: release after %ldms\n", held);
             if (held >= HOLD_MS) {
                 if (dbg) fprintf(stderr, "buttond: FIRE (send Ctrl+Alt+T)\n");
                 send_crosh(ufd);
+                last_tap_ms = 0;            /* a long hold isn't a tap       */
+            } else if (last_tap_ms && (rel - last_tap_ms) <= DOUBLE_GAP_MS) {
+                do_suspend(dbg);            /* second short tap -> sleep      */
+                last_tap_ms = 0;
+            } else {
+                last_tap_ms = rel;          /* first short tap; await a second*/
             }
         }
     }

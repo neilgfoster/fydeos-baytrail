@@ -8,7 +8,58 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T1 (2026-07-11) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T2 (2026-07-12) — END STATE (resume here)
+
+**Achieved: remote admin access to the tablet, hardened + proven bulletproof, plus a
+repo-level guardrail so we never lose it.** No disk/boot changes yet — Phase 1 probing
+is the next thing.
+
+### Remote access — DONE (channel #1 = Windows sshd)
+- Tablet runs **Win 8.1 (6.3.9600)** at **192.168.1.133** on home WiFi; reachable from
+  this host (FydeOS-laptop Crostini container, which NATs out to the `192.168.1.x` LAN).
+- Installed **Win32-OpenSSH** on the tablet; passwordless admin login as `ssh thinkpad10`
+  (ed25519 key `~/.ssh/thinkpad10`, alias in `~/.ssh/config`, admin key in
+  `C:\ProgramData\ssh\administrators_authorized_keys`). Acct `myPC` on host `Lenovo-PC`
+  (temp LAN password fallback kept in local memory, not in this repo). Default remote
+  shell = cmd.exe; for PS pipe a script over stdin:
+  `ssh thinkpad10 'powershell -NoProfile -Command -' < script.ps1`.
+
+### SSH hardened + PROVEN
+- sshd StartMode **Auto** + auto-restart on failure (5s/5s/10s); firewall rule `sshd`
+  persistent; pubkey+password auth both on. AC sleep/hibernate/monitor timeouts = never.
+- **Reboot test PASSED** — SSH returned **26s after a full reboot with NO login** (WiFi
+  auto-reconnects, sshd starts pre-login). This was the key risk; settled.
+- **IP-change resilience:** `~/.ssh/find-thinkpad.sh` scans `192.168.1.0/24` for :22 and
+  IDs the tablet by hostname `Lenovo-PC` regardless of DHCP IP (WiFi MAC
+  `C4-8E-8F-04-B5-73`). Optional not-yet-done: DHCP reservation on the router.
+
+### Guardrail committed to repo (so context is never lost on new session/compact/clear)
+- **`CLAUDE.md`** (new, auto-loaded every session): 🚨 NEVER BREAK SSH hard rule —
+  authoritative/overriding; in force for ALL ThinkPad10 work until a 2nd boot+SSH method
+  is recorded as PROVEN. No action that can drop SSH without a proven parallel channel;
+  prove-new-before-deprecating-old.
+- **`scripts/thinkpad-ssh.sh`** (new): re-orient command — reprints the rules, verifies
+  the live channel, relocates the tablet by key if the IP moved, shows sshd status.
+- Memory `[[thinkpad10-20c1-boot-blocked]]` updated with all of the above.
+
+### ▶ NEXT SESSION
+0. Run `scripts/thinkpad-ssh.sh` first — confirm channel #1 is live before anything.
+1. **Phase 1 probing (read-only):** (a) UEFI bitness via PE machine-type of
+   `S:\EFI\Microsoft\Boot\bootmgfw.efi` (`mountvol S: /s` first); (b) eMMC disk/GPT
+   layout + free space + ESP location; (c) firmware boot entries. These decide where a
+   preserved recovery partition can live and whether the 32-bit-UEFI boot trick is needed
+   — all BEFORE anything writes to disk.
+2. Then design Phase 2 recovery guarantee (sacrosanct recovery partition + controlled
+   partitioning; the stock ChromeOS installer is whole-disk destructive — do NOT use it
+   blindly). **Channel #2 (Linux/recovery SSH) must be proven in parallel before Windows
+   sshd is retired.**
+
+**Reminder:** the "SD not firmware-bootable" finding means firmware won't boot it directly,
+but GRUB on the eMMC ESP could still chainload payloads from the SD (SD as storage).
+
+---
+
+## ThinkPad 10 20C1 — Session T1 (2026-07-11) — END STATE
 
 **Goal:** install FydeOS on a Lenovo ThinkPad 10 20C1 (Intel Atom **Z3795**, Bay Trail-T,
 64-bit CPU). **Status: BLOCKED at "get the installer to boot" — no working boot medium.**

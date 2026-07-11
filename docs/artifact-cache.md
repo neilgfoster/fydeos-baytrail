@@ -63,7 +63,7 @@ fragment.
 ```
 
 Install-time config (grub.cfg PARTUUID template, ALSA UCM, `chrome_dev.conf` flags,
-the `install/*.sh` scripts, `soc_button_array`/`iconia-buttond` deployment) stays in the
+the `install/*.sh` scripts, `soc_button_array`/buttond-helper deployment) stays in the
 repo and is applied by the inject/install scripts — only the build-expensive binaries
 come from the release bundle.
 
@@ -75,4 +75,4 @@ come from the release bundle.
   build outputs are present on the build host).
 - ⬜ Wire `inject-kernel.sh` to accept `--from .artifact-cache/<tag>/`.
 - ⬜ The device-diagnostic util boot that auto-captures the hardware matrix (today the
-  `install/iconia-*-diag.sh` scripts do this piecemeal).
+  shared `diag/baytrail-*-diag.sh` scripts do this piecemeal).

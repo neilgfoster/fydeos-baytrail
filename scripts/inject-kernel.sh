@@ -14,7 +14,7 @@
 set -eu
 
 HERE=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-MNT=${MNT:-/tmp/iconia-esp}
+MNT=${MNT:-/tmp/baytrail-esp}
 BOARD_ID="" ; KERNEL="" ; DEV="" ; SLOT="A"
 
 while [ $# -gt 0 ]; do

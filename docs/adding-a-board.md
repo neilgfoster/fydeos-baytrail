@@ -4,6 +4,9 @@ This repo boots/installs FydeOS on **64-bit-CPU + 32-bit-UEFI** devices (Bay Tra
 Cherry Trail tablets) by rebuilding the openFyde kernel with the 32-bit EFI handover
 entry. The boot machinery is shared; per-device details live in `boards/<board>/`.
 
+> **Read [`bay-trail-playbook.md`](bay-trail-playbook.md) first** — the distilled,
+> board-agnostic traps from the W4-820 bring-up. It will save you multiple sessions.
+
 ## 0. Sanity check — is the device even supported?
 
 - **CPU must be 64-bit.** A genuinely 32-bit CPU (e.g. Clover Trail Z2760) can NOT
@@ -60,3 +63,7 @@ Boot, read `dmesg`, and fill in `boards/<board>/hardware-status.md`. Add fixes a
 `grub.cfg` cmdline tweaks (no rebuild), or `boards/<board>/stage/` +
 `scripts/inject-rootfs.sh` (firmware/UCM). See
 [hardware-status-legend.md](hardware-status-legend.md).
+
+For probing each subsystem (audio, WiFi, Bluetooth, sensors, power, ESP/boot), reach
+for the shared [`diag/`](../diag/) toolkit — `baytrail-*` prior-art scripts from the
+W4-820 bring-up. Copy the relevant one, adjust its device paths, and run it.

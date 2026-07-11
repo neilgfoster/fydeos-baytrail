@@ -41,7 +41,7 @@ cmd_clone(){
 cmd_config(){
   cd "$SRC"
   CHROMEOS_KERNEL_FAMILY="${KERNEL_FAMILY:-chromeos}" chromeos/scripts/prepareconfig "$KERNEL_FLAVOUR"
-  { echo "# --- iconia shared efi-mixed ---"; cat "$HERE/config/efi-mixed.config"; } >> .config
+  { echo "# --- baytrail shared efi-mixed ---"; cat "$HERE/config/efi-mixed.config"; } >> .config
   for f in "$BD"/config/*.config; do [ -e "$f" ] && { echo "# board $BOARD_ID $(basename "$f")"; cat "$f"; } >> .config; done
   # optional: match module dir name to reduce mismatch (still differs by sublevel)
   [ -n "${KERNEL_LOCALVERSION:-}" ] && echo "CONFIG_LOCALVERSION=\"$KERNEL_LOCALVERSION\"" >> .config

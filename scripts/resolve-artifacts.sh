@@ -63,7 +63,9 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   echo "== CACHE MISS =="
   echo "No release '$TAG'. Build then publish:"
   echo "  scripts/build-kernel-standalone.sh --board $BOARD    # produces vmlinuz + modules"
-  echo "  gcc -O2 -static -o $BDIR/install/iconia-buttond $BDIR/install/iconia-buttond.c"
+  for c in "$BDIR"/install/*.c; do
+    [ -e "$c" ] && echo "  gcc -O2 -static -o \"${c%.c}\" \"$c\"    # board static helper"
+  done
   echo "  scripts/publish-artifacts.sh --board $BOARD          # creates release '$TAG'"
   exit 10
 fi

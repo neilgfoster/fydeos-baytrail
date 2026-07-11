@@ -1,4 +1,4 @@
-# iconia
+# fydeos-baytrail
 
 Boot and install **FydeOS / openFyde** on **64-bit-CPU + 32-bit-UEFI** tablets
 (Intel Bay Trail / Cherry Trail) by rebuilding the openFyde kernel with
@@ -12,7 +12,7 @@ Multi-board: shared boot machinery, one directory per device under
 | **Acer Iconia W4-820** ([`boards/iconia-w4-820/`](boards/iconia-w4-820/)) | ✅ **Delivered + archived** — final build frozen ([delivery manifest](boards/iconia-w4-820/install/README.md)); unit physically retired (screen). |
 
 Starting a new Bay Trail tablet? Read the distilled
-[**Bay Trail playbook**](boards/_template/bay-trail-playbook.md) first, then
+[**Bay Trail playbook**](docs/bay-trail-playbook.md) first, then
 [`docs/adding-a-board.md`](docs/adding-a-board.md). Copy
 [`boards/_template/`](boards/_template/) to `boards/<your-board-id>/`.
 
@@ -92,10 +92,11 @@ od -An -tx1 -j $((0x236)) -N 2 /path/to/vmlinuz.A
 ```
 config/efi-mixed.config     shared kernel enabler (all 32-bit-UEFI boards)
 scripts/                    board-aware: inspect-usb, build-kernel, inject-kernel, inject-rootfs
-docs/                       adding-a-board, hardware-status-legend
+diag/                       shared Bay Trail diagnostic toolkit (prior-art probes; not per-board)
+docs/                       adding-a-board, bay-trail-playbook, hardware-status-legend
 boards/<id>/                per-device: board.env, usb-profile.env, hardware-status.md,
                             findings.md, config/, patches/, stage/, out/
-boards/_template/           copy to start a new board
+boards/_template/           copy to start a new board (skeleton only)
 PROGRESS.md                 cross-session source of truth
 ```
 

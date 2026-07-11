@@ -18,12 +18,12 @@
 # With --board, defaults --stage to boards/<id>/stage/. The stage dir is a
 # filesystem tree rooted at the rootfs root, e.g.:
 #   stage/lib/firmware/brcm/brcmfmac43241b4-sdio.bin
-#   stage/lib/firmware/brcm/brcmfmac43241b4-sdio.acer-w4-820.txt
+#   stage/lib/firmware/brcm/brcmfmac43241b4-sdio.<board>.txt
 #   stage/usr/share/alsa/ucm2/...
 set -eu
 
 HERE=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-MNT=${MNT:-/tmp/iconia-root}
+MNT=${MNT:-/tmp/baytrail-root}
 BOARD_ID="" ; STAGE="" ; DEV="" ; SLOT="A"
 
 while [ $# -gt 0 ]; do
@@ -68,8 +68,8 @@ trap 'sync; umount "$MNT" 2>/dev/null || true' EXIT
 echo "=== files to overlay ==="
 ( cd "$STAGE" && find . -type f | sed 's|^\.||' )
 
-# copy preserving tree; back up anything we overwrite into .iconia-backup/
-BK="$MNT/.iconia-backup"
+# copy preserving tree; back up anything we overwrite into .baytrail-backup/
+BK="$MNT/.baytrail-backup"
 ( cd "$STAGE" && find . -type f | while read -r f; do
     rel=${f#./}
     if [ -e "$MNT/$rel" ]; then mkdir -p "$BK/$(dirname "$rel")"; cp -an "$MNT/$rel" "$BK/$rel" 2>/dev/null || true; fi
@@ -77,5 +77,5 @@ BK="$MNT/.iconia-backup"
     cp -a "$STAGE/$rel" "$MNT/$rel"
   done )
 
-echo "done. Overwritten originals backed up under ROOT-$SLOT:/.iconia-backup/"
+echo "done. Overwritten originals backed up under ROOT-$SLOT:/.baytrail-backup/"
 echo "Remember: boot the NON-verified menuentry (verity is now invalid)."

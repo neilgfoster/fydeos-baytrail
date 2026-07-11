@@ -58,8 +58,8 @@ cmd_sync(){
   # Drop the Chromium *browser* source (chromium.xml): its ref
   # (openfyde-<branch>) is missing/flaky on the mirror AND it is ~40GB we don't
   # need for a kernel build. Excluding it unblocks the sync and saves disk.
-  if [ -s openfyde/manifest/chromium.xml ] && ! grep -q 'iconia-disabled' openfyde/manifest/chromium.xml; then
-    printf '<?xml version="1.0"?>\n<!-- iconia-disabled: browser not needed for kernel build -->\n<manifest>\n</manifest>\n' > openfyde/manifest/chromium.xml
+  if [ -s openfyde/manifest/chromium.xml ] && ! grep -q 'baytrail-disabled' openfyde/manifest/chromium.xml; then
+    printf '<?xml version="1.0"?>\n<!-- baytrail-disabled: browser not needed for kernel build -->\n<manifest>\n</manifest>\n' > openfyde/manifest/chromium.xml
   fi
   ln -snfr openfyde/manifest .repo/local_manifests
   repo sync -j"$(nproc)" --no-tags --optimized-fetch
@@ -70,10 +70,10 @@ cmd_config(){
   [ -d "$ksrc" ] || { echo "ERROR: kernel tree $ksrc missing - run sync first"; exit 1; }
   # 1. shared 32-bit-UEFI enabler + any board-specific config fragments
   local target="$ksrc/chromeos/config/x86_64/common.config"
-  { echo "# --- iconia: shared efi-mixed ---"; cat "$HERE/config/efi-mixed.config"; } >> "$target"
+  { echo "# --- baytrail: shared efi-mixed ---"; cat "$HERE/config/efi-mixed.config"; } >> "$target"
   for f in "$BOARD_DIR"/config/*.config; do
     [ -e "$f" ] || continue
-    { echo "# --- iconia board $BOARD_ID: $(basename "$f") ---"; cat "$f"; } >> "$target"
+    { echo "# --- baytrail board $BOARD_ID: $(basename "$f") ---"; cat "$f"; } >> "$target"
   done
   log "appended config fragments to $target"
   # 2. board-specific kernel patches

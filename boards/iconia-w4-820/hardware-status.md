@@ -4,7 +4,7 @@
 > frozen; see [`install/README.md`](install/README.md). The physical unit's
 > touchscreen shattered (dropped), so on-hardware iteration has ended — this board
 > is preserved as the reference implementation for future Bay Trail tablets.
-> Generalized, reusable lessons: [`../_template/bay-trail-playbook.md`](../_template/bay-trail-playbook.md).
+> Generalized, reusable lessons: [`../../docs/bay-trail-playbook.md`](../../docs/bay-trail-playbook.md).
 > **Delivered working:** boot/EFI_MIXED, display, backlight+ALS, WiFi, Bluetooth,
 > audio (legacy SST), touchscreen, auto-rotate, buttons, eMMC/microSD, battery %,
 > memory tuning, on-demand sleep, ARC++ (config edit). **Accepted limits:** AC bolt

@@ -9,7 +9,7 @@ and [../findings.md](../findings.md) for the full diagnostic trail.
 
 Everything here **applies persistent fixes** to a real install. One-off probes,
 surveys and superseded experiments were moved to the shared diagnostic toolkit at
-[`../../_template/diag/`](../../_template/diag/).
+[`../../../diag/`](../../../diag/).
 
 ---
 

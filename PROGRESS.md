@@ -4,7 +4,83 @@
 > the source of truth for *where we are*, *what's decided*, and *what's next*.
 > Update the "Current state" and "Next actions" sections at the end of each session.
 
-## Session 24 (2026-07-11) — END STATE (resume here)
+---
+
+# ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
+
+## ThinkPad 10 20C1 — Session T1 (2026-07-11) — END STATE (resume here)
+
+**Goal:** install FydeOS on a Lenovo ThinkPad 10 20C1 (Intel Atom **Z3795**, Bay Trail-T,
+64-bit CPU). **Status: BLOCKED at "get the installer to boot" — no working boot medium.**
+Not yet scaffolded as a board dir (blocked before any kernel work). All media prep done on a
+**separate chronos host** (an NVMe FydeOS laptop, `rootdev`=`/dev/nvme0n1p3`) used only as a
+tool; the ThinkPad itself runs **64-bit Windows 8** with working network.
+
+### Build target — ALREADY SOLVED (reuse W4-820's)
+The ThinkPad's stock installer USB is **R144 / build 16503, `amd64-fydeos_slim-io`, kernel
+6.6.99** — the *same release* as the W4-820 final build (`release-R144-16503.B-chromeos-6.6`).
+So if we ever build a kernel, reuse `boards/iconia-w4-820/board.env` values (shared
+`CROS_RELEASE` = shared openFyde checkout). Stock USB `vmlinuz.A` xloadflags = `0x2b` (stock,
+no EFI_MIXED — as expected).
+
+### The blocker, fully diagnosed
+- **USB port is DEAD (hardware fault).** The tablet's single full-size USB 2.0 port works with
+  **nothing** — not the installer stick, not any device, in **Windows or BIOS**. All ports
+  **enabled** in BIOS; Secure Boot **off**; **not** Computrace/TPM (those don't gate USB); not a
+  BIOS I/O-port toggle. Rotation-lock button is unrelated (screen orientation only).
+- **Installer media is VALID** (ruled out): USB is proper ChromeOS GPT, ESP=part 12 with
+  `bootx64.efi`+`grub.cfg`+`syslinux/vmlinuz.A`. We also added `bootia32.efi` to it → still not
+  listed on the ThinkPad, confirming it's **not a bitness/media problem, it's the dead port**.
+- **microSD works as storage but is NOT bootable** — the reader is on the internal **SDHCI**
+  controller, which this firmware won't boot from (not offered in the boot list). Card =
+  `/dev/mmcblk0` (62 GB) on the chronos host; **we cloned the full installer onto it**
+  (`dd /dev/sda → /dev/mmcblk0`, verified: GPT + ESP with both `bootx64.efi` + `bootia32.efi`).
+- **Network/PXE: dead end** — no wired NIC (Wi-Fi only, no firmware Wi-Fi PXE), and FydeOS has
+  no netboot image anyway.
+- **No dock available** (the ThinkPad Tablet Dock would bypass the dead port via the docking
+  connector — the cleanest fix if one can be obtained).
+
+### Current plan (self-install from the working 64-bit Windows)
+Firmware boots the internal eMMC fine (Windows). So from Windows we add a UEFI boot entry on the
+**eMMC ESP** that launches the FydeOS installer staged on the **SD**. **Linchpin:** does the
+firmware expose the SD as an EFI block device (it's excluded from the boot *menu*, but may still
+be addressable)? Test non-destructively with a **UEFI Shell** booted off the eMMC (`map -r`).
+- **Phase 1 (reversible):** drop a UEFI Shell on eMMC ESP, add a firmware boot entry via
+  `bcdedit {fwbootmgr}`, reboot into it, `map -r` → is the SD visible?
+- **Phase 2 (DESTROYS Windows):** replace shell with GRUB that **chainloads the SD's
+  `bootx64.efi`** → ChromeOS GRUB loads KERN-A/ROOT-A from SD → installer → installs FydeOS to
+  eMMC. If SD is NOT firmware-visible → fall back to staging on eMMC, or reconsider unit viability.
+
+### Firmware bitness — PENDING definitive check (the exact command to run on resume)
+64-bit Windows in UEFI mode ⇒ **64-bit UEFI** (Windows has **no** mixed-mode boot, unlike
+Linux/ChromeOS — so the "Bay Trail = 32-bit UEFI" trick does **not** apply to a Windows install).
+User pushed back on this; settle it definitively by reading the PE machine-type of the
+firmware-launched Windows loader. **Resume by running, in Admin PowerShell on the ThinkPad:**
+```
+cls; mountvol S: /s; $b=[IO.File]::ReadAllBytes("S:\EFI\Microsoft\Boot\bootmgfw.efi"); $p=[BitConverter]::ToInt32($b,0x3C); '{0:X4}  (8664=x64/64-bit UEFI, 014C=ia32/32-bit UEFI)' -f [BitConverter]::ToUInt16($b,$p+4)
+```
+`8664` → 64-bit UEFI, use `shellx64.efi`, **no** repo boot-fix needed (this device would boot a
+stock USB if the port worked). `014C` → genuinely 32-bit UEFI → need `shellia32.efi` + the repo's
+bootia32/EFI_MIXED path. Have **both** `shellx64.efi` + `shellia32.efi` downloaded (from
+`github.com/pbatard/UEFI-Shell/releases`) either way.
+
+### ▶ NEXT SESSION
+1. Run the `bootmgfw.efi` PE-arch check above → lock firmware bitness.
+2. Phase 1: boot the matching UEFI Shell off the eMMC (`bcdedit {fwbootmgr}` entry) → `map -r`
+   → decide if SD chainload is viable.
+3. If viable → Phase 2 GRUB chainload (checkpoint: this wipes Windows). Else → dock / eMMC-stage
+   / drop this unit. Then, only once it boots, scaffold `boards/thinkpad10-20c1/`.
+
+**Key context:** chronos host media nodes — installer USB `/dev/sda` (7633 MB), SD clone
+`/dev/mmcblk0` (62 GB). ThinkPad Windows: 64-bit, networked, Admin PowerShell/cmd; `mountvol S: /s`
+mounts the eMMC ESP. See [[thinkpad10-20c1-boot-blocked]]. Give copy-paste commands prefixed with
+`clear;`/`cls` per [[prefix-shell-commands-with-clear]].
+
+---
+
+# ARCHIVED BOARD: Acer Iconia W4-820 (delivered + retired)
+
+## Session 24 (2026-07-11) — END STATE
 
 **Focus: power button / sleep (the S23 next-focus item). RESULT: on-demand sleep now works.**
 All live via SSH (root@192.168.1.31, key `~/.ssh/iconia_ed25519`).

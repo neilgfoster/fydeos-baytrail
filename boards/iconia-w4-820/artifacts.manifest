@@ -16,12 +16,12 @@
 MATCH_STOCK_KERNEL="6.6.99-fyde-*"
 
 # --- The build we inject. UTS release of our kernel (used to place modules and
-#     to sanity-check a downloaded bundle). ---
-BUILD_KERNEL_UTS="6.6.76-gabcfb16364e1"
+#     to sanity-check a downloaded bundle). FINAL = R144/6.6.99 (S19 onward). ---
+BUILD_KERNEL_UTS="6.6.99-g7232af57f054"
 
 # --- Release tag base. resolve-artifacts.sh appends "-<config-fingerprint[:12]>"
 #     so the effective tag is e.g. iconia-w4-820/6.6.76-baytrail-ab12cd34ef56 ---
-BUILD_TAG_BASE="iconia-w4-820/6.6.76-baytrail"
+BUILD_TAG_BASE="iconia-w4-820/6.6.99-baytrail"
 
 # --- Fingerprint inputs (relative to repo root). Any change here mints a new tag
 #     and forces a rebuild. Globs expanded by resolve-artifacts.sh. ---

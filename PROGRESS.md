@@ -1534,3 +1534,31 @@ Utility-boot how-to: deploy `install/iconia-*.sh` to USB `/sbin`, `sed` grub
 sda<->sdb — mount FRESH each command; free space by deleting decompressed
 `/lib/firmware/**` dupes (kernel loads .xz natively now). eMMC PARTUUID
 95DE10DD-E5AA-0C49-8E23-A32012F41F14.
+
+---
+
+## Session 25 (2026-07-11) — DELIVERY + ARCHIVE (final)
+
+**The physical W4-820 was dropped; touchscreen shattered.** The unit still boots
+but is no longer usable for on-hardware iteration. Decision: wrap the board up as a
+final delivery build and clean the repo for the next Bay Trail tablet.
+
+Done this session (repo-only, no hardware):
+- **install/ reorganized.** 31 one-off diagnostic/survey/probe/experiment scripts
+  moved out of `boards/iconia-w4-820/install/` into the shared toolkit
+  `boards/_template/diag/` (incl. `iconia-power-install.sh` — the AXP288 wrong-PMIC
+  dead end). `install/` now holds only the persistent-fix + orchestrator + recovery
+  scripts that constitute the delivery build.
+- **Delivery manifest** written: `boards/iconia-w4-820/install/README.md` — final
+  kernel (6.6.99-g7232af57f054, R144), config fragments, patches, cmdline, the
+  keyboard-free install/finalize order, per-subsystem boot jobs, and accepted limits.
+- **Build metadata corrected** to the committed-to final: `board.env` and
+  `artifacts.manifest` now say R144/6.6.99 (were still R138/6.6.76).
+- **Template seeded for tablet #2:** `boards/_template/bay-trail-playbook.md`
+  (distilled board-agnostic lessons + known walls) and
+  `boards/_template/diag/README.md` (diagnostic toolkit index by category).
+- **Status banners:** `hardware-status.md` and top-level `README.md` marked the
+  board ✅ delivered + archived.
+
+Board is frozen. Next work = a **new** Bay Trail tablet: copy `boards/_template/`,
+read the playbook, run `inspect-usb.sh`.

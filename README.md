@@ -5,8 +5,16 @@ Boot and install **FydeOS / openFyde** on **64-bit-CPU + 32-bit-UEFI** tablets
 `CONFIG_EFI_MIXED` and injecting it into a stock FydeOS installer USB.
 
 Multi-board: shared boot machinery, one directory per device under
-[`boards/`](boards/). First target: **Acer Iconia W4-820**
-([`boards/iconia-w4-820/`](boards/iconia-w4-820/)).
+[`boards/`](boards/).
+
+| Board | Status |
+|-------|--------|
+| **Acer Iconia W4-820** ([`boards/iconia-w4-820/`](boards/iconia-w4-820/)) | ✅ **Delivered + archived** — final build frozen ([delivery manifest](boards/iconia-w4-820/install/README.md)); unit physically retired (screen). |
+
+Starting a new Bay Trail tablet? Read the distilled
+[**Bay Trail playbook**](boards/_template/bay-trail-playbook.md) first, then
+[`docs/adding-a-board.md`](docs/adding-a-board.md). Copy
+[`boards/_template/`](boards/_template/) to `boards/<your-board-id>/`.
 
 ## The problem in one paragraph
 

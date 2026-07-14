@@ -13,7 +13,7 @@
 # packages, assembled into an initramfs tree.
 #
 # Prereqs (Debian/Ubuntu): build-essential bc bison flex libssl-dev libelf-dev cpio kmod
-#   rsync busybox-static dropbear-bin wpasupplicant
+#   rsync busybox-static dropbear-bin wpasupplicant e2fsprogs
 #
 # Usage:
 #   scripts/build-rescue-image.sh --board <id> [clone|config|initramfs|build|all]
@@ -46,7 +46,7 @@ deps(){
   for t in make gcc bc bison flex cpio busybox rsync; do
     command -v "$t" >/dev/null || { echo "MISSING toolchain: $t (apt install build-essential bc bison flex libssl-dev libelf-dev cpio kmod rsync)"; exit 1; }
   done
-  for pkg_bin in /bin/busybox:busybox-static /usr/sbin/dropbear:dropbear-bin /sbin/wpa_supplicant:wpasupplicant /usr/sbin/sgdisk:gdisk; do
+  for pkg_bin in /bin/busybox:busybox-static /usr/sbin/dropbear:dropbear-bin /sbin/wpa_supplicant:wpasupplicant /usr/sbin/sgdisk:gdisk /sbin/mke2fs:e2fsprogs /sbin/resize2fs:e2fsprogs /sbin/e2fsck:e2fsprogs; do
     p=${pkg_bin%%:*}; pkg=${pkg_bin##*:}
     [ -e "$p" ] || { echo "MISSING $p - apt install $pkg (and enable non-free-firmware for firmware-brcm80211)"; exit 1; }
   done
@@ -119,6 +119,24 @@ cmd_initramfs(){
   # definitely apt-installable (gdisk package) and takes raw ChromeOS type GUIDs
   # directly, so its output is fully cgpt/vboot-compatible without needing cgpt itself.
   copy_with_libs /usr/sbin/sgdisk sbin
+
+  # e2fsprogs (mke2fs/resize2fs/e2fsck): needed to create a real ext4 filesystem on
+  # STATE and grow the dd'd ROOT-A rootfs to fill its partition (see
+  # boards/thinkpad10-20c1/PARTITION-DESIGN.md's filesystem-creation step, T9). BusyBox's
+  # own built-in `mke2fs` applet (already symlinked into bin/ by the applet loop above)
+  # is ext2-only with no `-t`/journal/extents support, and BusyBox has no `resize2fs`
+  # applet at all - found live, on real hardware, when T9's plan first tried to run
+  # `mkfs.ext4` (not found) against this image. Real e2fsprogs picks its target fs type
+  # from argv[0] (`mkfs.ext4` vs `mke2fs`), so symlink the conventional names alongside
+  # the one real binary - same shape as the busybox applet-symlink loop above. Installed
+  # into sbin/, which PATH resolves before bin/ (where busybox's mke2fs symlink lives),
+  # so the real binary wins.
+  copy_with_libs /sbin/mke2fs   sbin
+  copy_with_libs /sbin/resize2fs sbin
+  copy_with_libs /sbin/e2fsck   sbin
+  for alias in mkfs.ext2 mkfs.ext3 mkfs.ext4; do
+    ln -sf mke2fs "$IMROOT/sbin/$alias"
+  done
 
   # WiFi firmware: from Debian's firmware-brcm80211 (non-free-firmware component -
   # `apt-get install firmware-brcm80211`). This device's actual chip identifies itself

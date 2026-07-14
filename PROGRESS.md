@@ -8,7 +8,136 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T8 (2026-07-14) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T9 (2026-07-14) — END STATE (resume here)
+
+**Executed T8's queued "step 1": created a real filesystem on STATE and populated ROOT-A
+with the actual FydeOS rootfs payload, on the 11 GPT partitions T8 hand-placed. Hit and
+resolved a real capability gap along the way — the rescue image had no e2fsprogs, so a
+sub-session rebuilt/boot-tested/promoted a new rescue image first, following the same
+prove-new-before-deprecating-old pattern as T6→T7.**
+
+### Plan drafted, approach signed off before any live data was even pulled
+`/home/neil/.claude/plans/thinkpad10-t9-mkfs-rootfs.md`. Key insight: rather than building
+a rootfs via `cros_sdk`, reuse the SD card's own ROOT-A partition bytes — T5 already
+established the SD card is a genuine 12-partition installer clone of this exact pinned
+release. User signed off on four approach questions up front: reuse SD-card bytes for
+ROOT-A (not a from-source build), `resize2fs` after `dd` to use the full partition,
+STATE's label from live `blkid`-equivalent data (not a guessed placeholder), and running
+everything inside the Rescue Recovery image (channel #2), same as T8.
+
+### Pre-flight (live, read-only) — confirmed and corrected assumptions before writing
+Booted `Rescue Recovery`, re-identified eMMC vs SD card by `boot0/boot1/rpmb` identity
+(**not** assumed device numbers) — good thing this was a standing habit: **the
+`/dev/mmcblk*` node assignment was swapped from T8's session** (this boot: SD card =
+`mmcblk2`, eMMC = `mmcblk1` — opposite of T8). Confirmed T8's `sgdisk` write survived the
+reboot intact (P1–4 byte-identical, P5–15 present exactly as designed). Confirmed the SD
+card's stock ChromeOS partition numbering (STATE=P1, ROOT-A=P3) matches
+`PARTITION-DESIGN.md`'s reference table. `blkid`/`file` turned out not to be bundled in
+this minimal image — worked around by reading the ext2 superblock directly: magic-number
+check (`53 ef` at byte offset 1080) confirmed ext2/3/4 family on both SD-card partitions,
+and the real STATE volume label (`STATE`, not the draft's placeholder `H-STATE`) was read
+straight from the superblock's `s_volume_name` field (offset 1144).
+
+### 🔴 Real capability gap found live: no e2fsprogs in the rescue image
+First attempt at `mkfs.ext4` failed — `not found`. The rescue image (built T4, `sgdisk`
+added T6) never bundled e2fsprogs. BusyBox's own built-in `mke2fs` applet exists but is
+ext2-only (no `-t`, no journal/extents, no `resize2fs` at all) — confirmed via `mke2fs
+--help`. User chose (over using the limited BusyBox tool) to bundle real e2fsprogs into
+the rescue image, same `copy_with_libs()` pattern as `sgdisk`.
+
+### Rescue image rebuilt, boot-tested, and promoted (sub-session, full T6→T7 pattern)
+Plan: `/home/neil/.claude/plans/thinkpad10-t9-rescue-boottest.md`.
+- **Build**: `scripts/build-rescue-image.sh` now bundles `mke2fs`/`resize2fs`/`e2fsck`
+  (real e2fsprogs 1.47.0, not BusyBox's), with `mkfs.ext2`/`mkfs.ext3`/`mkfs.ext4` symlinks
+  alongside the one real binary — same shape as e2fsprogs' own multicall convention.
+  Rebuilt locally, valid PE/EFI confirmed, new size 24,851,456 bytes (up from T6/T7's
+  24,220,672).
+- **Staged** as `S:\EFI\Rescue\rescuex64-t9.efi`, alongside the untouched proven
+  `rescuex64.efi` — never overwritten blind.
+- **Boot-tested** via a disposable one-time BCD entry (`bcdedit /copy {bootmgr}` →
+  `Rescue Test T9`, pointed at the candidate, `{fwbootmgr} bootsequence` armed) — required
+  its own explicit sign-off on a written plan file (the permission classifier correctly
+  blocked a bare chat "proceed" for a boot-order-adjacent action, per `CLAUDE.md`'s
+  standing rule). **PASSED**: `resize2fs -V`/`e2fsck -V`/`mkfs.ext4 -V` all resolved to the
+  real e2fsprogs 1.47.0, no regression in `sgdisk`/WiFi. Disposable entry deleted after;
+  `bcdedit /enum {fwbootmgr}` confirmed the pristine 6-entry baseline restored.
+- **🔴 Gotcha found and documented**: BusyBox `ash`'s "standalone shell" feature
+  intercepts bare command names matching its own compiled-in applet table *before* any
+  `$PATH` search — a bare `mke2fs` call always hits BusyBox's limited ext2-only applet
+  regardless of PATH order (`/sbin` bundled the real one, `/bin` has BusyBox's), while
+  `mkfs.ext4`/`resize2fs`/`e2fsck` have no BusyBox applet counterpart and resolve
+  correctly. Confirmed the actual command form the plan uses (`mkfs.ext4`) is unaffected.
+- **Promoted** (rename-in-place, no `bcdedit` change needed since the persistent `Rescue
+  Recovery` entry already points at the filename `rescuex64.efi`): old T6/T7 build kept as
+  `rescuex64-t6t7proven.efi.bak` (instant rollback), new build is now `rescuex64.efi`.
+
+### ✅ STATE + ROOT-A write executed and verified
+Re-booted into `Rescue Recovery` (now e2fsprogs-capable), re-identified eMMC/SD card by
+identity again (swapped back to T8's original mapping this boot — third different mapping
+across three boots this session, fully confirming node numbers must never be assumed),
+re-confirmed the eMMC partition table unchanged, then:
+- **STATE**: `mkfs.ext4 -L STATE /dev/mmcblk2p15` — succeeded, real ext4 with journal.
+  Read-only mount sanity check after: empty, just `lost+found`, as expected.
+- **ROOT-A**: `dd if=/dev/mmcblk1p3 of=/dev/mmcblk2p6 bs=1M conv=fsync` — copied the SD
+  card's real 2,856,321,024-byte ROOT-A payload (exactly 2724 × 1 MiB, no partial-block
+  truncation risk). **Verified byte-exact**: `sha256sum` of the source and of the first
+  `SRC_BYTES` of the destination both produced
+  `211bf779c6e1679d170a2515b6e627326aa9c1f7848438c61f4592bd7f2de86e`. Read-only mount
+  sanity check after: real FydeOS rootfs, `/etc/lsb-release` confirms
+  `CHROMEOS_RELEASE_BUILDER_PATH=amd64-fydeos_slim/R20-16503.20.0`,
+  `CHROMEOS_RELEASE_VERSION=16503.20.22.10` — matches `board.env`'s pinned
+  `release-R144-16503.B` target exactly.
+- **`resize2fs`: attempted, blocked, skipped by user decision.** Failed with
+  `Filesystem has unsupported read-only feature(s)` (`FEATURE_R24`...`FEATURE_R31`).
+  Root-caused via `e2fsck -n -f` on both sides: the **untouched SD-card source reports the
+  identical unsupported features** — this is inherent to genuine ChromeOS/FydeOS rootfs
+  images (ChromiumOS's own patched e2fsprogs supports extra feature bits mainline
+  e2fsprogs 1.47.0 doesn't), not corruption from the `dd`. Building ChromiumOS's own
+  patched e2fsprogs would need the `cros_sdk` toolchain this project has otherwise
+  avoided — user chose to leave ROOT-A's filesystem at its original ~2.66 GiB inside the
+  4 GiB partition instead. The unused ~1.34 GiB is harmless, just unused partition space.
+- Both new filesystems unmounted cleanly after sanity checks.
+
+### Channel #1 status
+Re-verified healthy at every Windows-side step this session (before/after each `bcdedit`
+action, before/after promotion, and at session close). One recurring, already-documented
+"asleep" drop mid-session (screen-off symptom, not a new bug) — resolved by the user
+waking the tablet, exactly per the known pattern in memory
+`[[thinkpad10-20c1-boot-blocked]]`.
+
+### ✅ Windows-side final sanity check (session close)
+`Get-Disk -Number 0`: Online/Healthy, 62,537,072,640 bytes, unchanged. `Get-Partition
+-DiskNumber 0`: P1–3 (ESP/MSR/`C:`, `C:` retains its drive letter) and P4 (Recovery)
+unchanged; all 11 new partitions (5–15) present as inert `Unknown`-type entries at exactly
+the expected sizes (e.g. P6 = 4,294,967,296 bytes = ROOT-A, P15 = 11,471,419,392 bytes ≈
+10.68 GiB = STATE) — Windows completely unaffected throughout this session's eMMC writes,
+as expected since P1–4 were never touched.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Design and stage the GRUB boot config change (Iconia-pattern `root=PARTUUID=` using
+   ROOT-A's recorded PARTUUID `F2E33B09-C91E-4469-A3BB-6661E0367944`, from T8) — per
+   `PARTITION-DESIGN.md`'s "Chosen approach" (boot off existing ESP, no new EFI-SYSTEM
+   partition). This is a boot-order-adjacent change to the ESP GRUB owns — needs its own
+   plan + sign-off per the standing rule, same as T9's rescue-image boot-test did.
+2. Only after boot config lands and a real first-boot test passes: OOBE / hardware
+   validation pass per `hardware-status.md`.
+
+**State at session close:** repo committed through this entry (plan files stay at
+`~/.claude/plans/thinkpad10-t9-mkfs-rootfs.md` and
+`~/.claude/plans/thinkpad10-t9-rescue-boottest.md`, per existing convention — not copied
+into the repo). eMMC (Disk 0): P1–4 unchanged, STATE (15) now a real formatted ext4
+filesystem, ROOT-A (6) now holds the genuine FydeOS rootfs (verified byte-exact,
+~2.66 GiB used of its 4 GiB). All other new partitions (KERN-A/B/C, ROOT-B/C, OEM,
+reserved, RWFW) still empty, unchanged from T8. Rescue image (channel #2) upgraded:
+`rescuex64.efi` now bundles e2fsprogs alongside `sgdisk`, boot-tested and promoted;
+`rescuex64-t6t7proven.efi.bak` kept as instant rollback. Firmware boot manager back to
+the exact pristine 6-entry baseline (no leftover test entries). Channel #1 confirmed
+healthy at session close.
+
+---
+
+## ThinkPad 10 20C1 — Session T8 (2026-07-14) — END STATE (superseded by T9 above)
 
 **Executed T6/T7's queued `sgdisk` partition-write step: hand-placed all 11 ChromeOS
 partitions (GPT indices 5–15) into the ~14.74 GB eMMC gap designed in

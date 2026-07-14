@@ -8,7 +8,82 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T4 (2026-07-14) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T5 (2026-07-14) — END STATE (resume here)
+
+**Short session: re-oriented (channel #1 needed a known_hosts refresh, not an actual
+problem), then executed the first of T4's two queued next-steps — shrank `C:` to free
+eMMC space. No ChromeOS partitioning yet; that remains fully undesigned.**
+
+### Re-orient note: stale known_hosts, not a real channel-#1 problem
+`scripts/thinkpad-ssh.sh` initially reported the tablet "NOT FOUND" on the LAN scan —
+turned out to be a false negative: `find-thinkpad.sh` swallows SSH stderr, so a *host key
+mismatch* (not absence) was silently read as "no match." The mismatch itself was just a
+stale `known_hosts` entry from earlier key-recovery steps this session; the live server
+banner confirmed genuine `OpenSSH_for_Windows_10.0` (not a mix-up with the rescue image),
+and the user visually confirmed the tablet awake and in Windows. Refreshed the entry
+(`ssh-keygen -R 192.168.1.133`, backup at `~/.ssh/known_hosts.old`) — channel #1 confirmed
+healthy afterward (`Lenovo-PC`, sshd RUNNING/AUTO_START). Worth remembering: this script's
+stderr-swallowing means a real MITM and a stale known_hosts entry look identical in its
+output — always check manually (`ssh -v`) before blindly clearing a host-key warning.
+
+### ✅ Shrink C: DONE — 14.74 GB freed for the future ChromeOS region
+Executed via `Resize-Partition -DriveLetter C -Size 34GB` over channel #1 (PowerShell
+piped over stdin, per `CLAUDE.md`'s quoting note). Plan (with live pre-flight numbers,
+options considered, and rationale) is at `/home/neil/.claude/plans/glittery-splashing-adleman.md`.
+
+- **Before:** Disk 0 (58.24 GB GPT) — P1 ESP 0.25 GB, P2 MSR 0.12 GB, P3 `C:` 48.74 GB
+  (35.88 GB free), P4 `images` recovery 9.12 GB (0.14 GB free, untouched).
+  `Get-PartitionSupportedSize` floor was 32.56 GB (pinned MFT/system zones) — well short
+  of the full free space, so 35.88 GB was never achievable anyway.
+- **Chosen target:** 34.00 GB (small margin above the 32.56 GB floor; user picked this
+  over a more conservative 38 GB or the maximum 32.56 GB during plan review).
+- **After (verified):** P3 `C:` now 34.00 GB (21.15 GB free). New **~14.74 GB unallocated
+  gap** sits between P3 (ends offset 36,915,118,080) and P4 (starts offset
+  52,742,324,224) — not at the disk's tail, since P4 already occupies it; this is fine,
+  GPT partitions don't need end-of-disk contiguity.
+- **Channel #1 re-verified healthy immediately after** (`scripts/thinkpad-ssh.sh`):
+  `Lenovo-PC` reachable, sshd RUNNING/AUTO_START. Resize did not touch sshd, the ESP, or
+  any boot configuration.
+- P4 (9 GB Lenovo recovery) fate is still an **open, undecided question** — untouched by
+  this step, left for later.
+
+### 🔴 Reality check: step 2 (hand-place ChromeOS partitions) has ZERO existing tooling
+A repo-wide search this session (before executing the shrink) confirmed: every prior
+"install" path in this repo (the Iconia W4-820's `iconia-install.sh`/`iconia-init.sh`)
+delegates 100% of partitioning to the stock `chromeos-install --dst ... --yes` whole-disk
+installer — exactly what `PROGRESS.md`/`CLAUDE.md` already rule out for this device. There
+is no `cgpt add`/`cgpt create`/`cgpt boot`/`sgdisk`/`mkfs` usage anywhere in this repo.
+Hand-placing KERN-A/B, ROOT-A/B, STATE (etc.) into the new ~14.74 GB gap is genuinely new
+work — likely `cgpt`-based, informed by dumping the SD card's existing 12-partition
+ChromeOS installer clone (T3) as a layout/size template — and needs its own research and
+design pass, not a quick follow-on to this session's shrink.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live (per the note above, a
+   "NOT FOUND" result may just be a stale `known_hosts` entry; check with `ssh -v` before
+   assuming anything is actually wrong).
+1. **Design the ChromeOS partition-placement step from scratch** — no shortcuts exist in
+   this repo yet. Start by dumping the SD card's existing ChromeOS-clone GPT (`cgpt show`
+   or `sgdisk -p` against `/dev/mmcblk0` on a Linux host, or read it directly if still
+   accessible) as a reference for standard KERN/ROOT/STATE/OEM sizes, then design how to
+   author an equivalent partial GPT into the new ~14.74 GB gap (offset range
+   36,915,118,080–52,742,324,224 on Disk 0) without disturbing P1–P4. Decide the tool
+   (`cgpt` vs `sgdisk`) and where it runs (rescue image's busybox environment now that
+   channel #2 has a local root shell + can mount arbitrary block devices, vs. a separate
+   Linux host with the eMMC pulled — the former avoids needing to physically open the
+   tablet at all).
+2. Only once that's designed and reviewed: hand-place the partitions + install FydeOS,
+   per the (still-draft) Phase-2 plan in T4's section below. `Rescue Recovery` remains the
+   fallback throughout.
+
+**State at session close:** repo not yet committed (this session's `PROGRESS.md` edit is
+pending). Firmware/boot config unchanged from T4's close (pristine layout + persistent
+`Rescue Recovery` entry, Windows default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB,
+new ~14.74 GB unallocated gap before P4, P4 unchanged. Channel #1 confirmed healthy.
+
+---
+
+## ThinkPad 10 20C1 — Session T4 (2026-07-14) — END STATE
 
 **Big session. No destructive disk changes throughout, but a lot happened: (1) rebuilt SSH
 channel #1 access in a fresh Claude Code sandbox that started empty, (2) skipped T3's

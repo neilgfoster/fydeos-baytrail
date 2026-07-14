@@ -70,11 +70,11 @@ plan naming the exact commands:
 3. Only after partitions exist for real: filesystem creation + FydeOS install (deferred
    item #3), per the (still-draft) Phase-2 plan in T4's section below.
 
-**State at session close:** repo committed and pushed (design doc + `sgdisk` bundling +
-this log). No ThinkPad-facing changes at all this session (channel #1 used read-only
-once, for the `Get-Partition -DiskNumber 1` reference query). Disk 0 state unchanged from
-T5's close (P1–P2 unchanged, P3 `C:` 34.00 GB, ~14.74 GB gap, P4 unchanged). Channel #1
-re-verified healthy at session close.
+**State at session close:** repo committed and pushed through `e8240e4` (design doc +
+`sgdisk` bundling + this log, single commit). No ThinkPad-facing changes at all this
+session (channel #1 used read-only once, for the `Get-Partition -DiskNumber 1` reference
+query). Disk 0 state unchanged from T5's close (P1–P2 unchanged, P3 `C:` 34.00 GB, ~14.74
+GB gap, P4 unchanged). Channel #1 re-verified healthy at session close.
 
 ---
 

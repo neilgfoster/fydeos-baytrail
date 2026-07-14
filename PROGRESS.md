@@ -70,7 +70,8 @@ these are expected, already-documented behaviors, not new bugs.
 2. Only after partitions exist for real: filesystem creation + FydeOS install, per the
    (still-draft) Phase-2 plan in T4's section below.
 
-**State at session close:** repo committed and pushed (this entry). ESP:
+**State at session close:** repo committed and pushed through `e8470fc` (this entry, single
+commit). ESP:
 `S:\EFI\Rescue\rescuex64.efi` is now the `sgdisk`-bundled T6 build (24,220,672 bytes),
 `rescuex64-t4proven.efi.bak` kept as rollback, `rescue-shadow.txt` unchanged. Firmware:
 pristine 6-entry baseline + persistent `Rescue Recovery` only (no leftover temp

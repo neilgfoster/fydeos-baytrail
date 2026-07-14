@@ -46,7 +46,7 @@ deps(){
   for t in make gcc bc bison flex cpio busybox rsync; do
     command -v "$t" >/dev/null || { echo "MISSING toolchain: $t (apt install build-essential bc bison flex libssl-dev libelf-dev cpio kmod rsync)"; exit 1; }
   done
-  for pkg_bin in /bin/busybox:busybox-static /usr/sbin/dropbear:dropbear-bin /sbin/wpa_supplicant:wpasupplicant; do
+  for pkg_bin in /bin/busybox:busybox-static /usr/sbin/dropbear:dropbear-bin /sbin/wpa_supplicant:wpasupplicant /usr/sbin/sgdisk:gdisk; do
     p=${pkg_bin%%:*}; pkg=${pkg_bin##*:}
     [ -e "$p" ] || { echo "MISSING $p - apt install $pkg (and enable non-free-firmware for firmware-brcm80211)"; exit 1; }
   done
@@ -112,6 +112,13 @@ cmd_initramfs(){
   copy_with_libs /usr/bin/dropbearkey sbin
   copy_with_libs /sbin/wpa_supplicant sbin
   copy_with_libs /sbin/wpa_cli        sbin
+
+  # sgdisk: dynamically linked GPT tool - needed to hand-place the ChromeOS partition
+  # set into the eMMC's free gap from inside this rescue environment (see
+  # boards/thinkpad10-20c1/PARTITION-DESIGN.md). Chosen over cgpt for the write path:
+  # definitely apt-installable (gdisk package) and takes raw ChromeOS type GUIDs
+  # directly, so its output is fully cgpt/vboot-compatible without needing cgpt itself.
+  copy_with_libs /usr/sbin/sgdisk sbin
 
   # WiFi firmware: from Debian's firmware-brcm80211 (non-free-firmware component -
   # `apt-get install firmware-brcm80211`). This device's actual chip identifies itself

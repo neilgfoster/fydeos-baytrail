@@ -8,7 +8,77 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T5 (2026-07-14) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T6 (2026-07-14) — END STATE (resume here)
+
+**Designed T5's queued "hand-place ChromeOS partitions" step from scratch (repo-only —
+no ThinkPad eMMC writes this session). Confirmed the two-phase goal explicitly: Phase A
+is a bounded dual-boot test install (this design) to validate hardware with Windows
+intact as the fallback; Phase B (future, gated on Phase A succeeding) wipes Windows for a
+full-disk FydeOS install. Design findings are written up so Phase B can reuse what
+generalizes without inheriting Phase-A's squeezed sizing.**
+
+### Design deliverable: `boards/thinkpad10-20c1/PARTITION-DESIGN.md` (new)
+Full partition-placement design for the ~14.74 GB gap opened by T5's `C:` shrink. Built
+from **live reference data pulled this session** (read-only, channel #1): queried the SD
+card (Windows Disk 1 — the existing 12-partition ChromeOS/FydeOS installer clone, same
+`release-R144-16503.B` build this board targets) via `Get-Partition -DiskNumber 1`,
+giving the real, exact stock ChromeOS type-GUID table and partition sizes for this build
+rather than assumed values. See the doc for the full table; key decisions:
+- **No new EFI-SYSTEM partition in the gap** — boot continues off the existing eMMC ESP
+  (P1), same pattern as channel #2's rescue image and Iconia's GRUB-`linux`-boots-a-file
+  approach (`root=PARTUUID=...`, bypassing vboot's automatic kernel-partition selection).
+- **Otherwise keep standard ChromeOS partition shape** (numbers/labels/types) sized down
+  to fit — FydeOS/ChromeOS userland generally expects to find partitions by conventional
+  cgpt number/label, so kept-but-minimal beats omitted.
+- **Tool: `sgdisk`, not `cgpt`, for the actual write** — confirmed apt-installable
+  (`gdisk` package; `cgpt`'s Debian availability was unconfirmed) and takes raw ChromeOS
+  type GUIDs directly, `--backup`/`-p` gives an atomic snapshot+diff safety net.
+- **Runs inside the rescue image (channel #2), not an external host with the eMMC
+  pulled** — keeps Windows/channel #1 completely uninvolved in the actual write.
+
+### `scripts/build-rescue-image.sh` — `sgdisk` bundled into the rescue initramfs
+Added via the existing `copy_with_libs()` pattern (same shape as `dropbear`/
+`wpa_supplicant`): `deps()` now checks for `/usr/sbin/sgdisk` (`gdisk` package),
+`cmd_initramfs()` bundles it plus its resolved libs (`libuuid`, `libpopt`, `libstdc++` —
+new; `libm`/`libgcc_s`/`libc`/the dynamic linker were already present from existing
+bundled binaries). **Verified locally this session** (this sandbox, not the ThinkPad):
+rebuilt the initramfs, confirmed `sgdisk` + all libs present and correctly resolved, then
+ran a full kernel rebuild — produced a valid PE/EFI `rescuex64.efi` (24,220,672 bytes, up
+from T4's 23,000,064 — the expected size increase from the new binary+libs; same PE-header
+sanity check T4 established). **Not staged onto the device this session** — deliberately
+build/verify-only, per the plan's scoping.
+
+### 🔴 Still fully deferred — needs its own separate go-ahead before running
+Per `CLAUDE.md`'s standing rule and the "plan before executing disk changes" practice, none
+of the following happened this session and none should start without a fresh, explicit
+plan naming the exact commands:
+1. Re-staging the rebuilt `rescuex64.efi` onto the tablet's ESP (SSH+ESP-write step).
+2. Actually running `sgdisk` against the eMMC inside the rescue image — needs the final
+   sector math (re-confirm 512-byte sectors via `blockdev --getss` first), the exact
+   `sgdisk -n`/`-t`/`-c` sequence, the `--backup` step, and a pre/post `sgdisk -p` diff
+   confirming P1–P4 are byte-identical before/after.
+3. Filesystem creation + actual FydeOS install (PROGRESS.md's separate "step 2").
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Re-stage the rebuilt rescue image (with `sgdisk`) onto the ESP, boot-test channel #2
+   still works with the larger initramfs (WiFi join → SSH → confirm `sgdisk --version`
+   runs from inside the rescue shell).
+2. Write the concrete, reviewed `sgdisk` command sequence (final sector math off a live
+   `blockdev --getss` + `sgdisk -p` read of the real eMMC) as its own plan, get sign-off,
+   then execute step 2 above (deferred item #2) with the backup/diff safety net.
+3. Only after partitions exist for real: filesystem creation + FydeOS install (deferred
+   item #3), per the (still-draft) Phase-2 plan in T4's section below.
+
+**State at session close:** repo committed and pushed (design doc + `sgdisk` bundling +
+this log). No ThinkPad-facing changes at all this session (channel #1 used read-only
+once, for the `Get-Partition -DiskNumber 1` reference query). Disk 0 state unchanged from
+T5's close (P1–P2 unchanged, P3 `C:` 34.00 GB, ~14.74 GB gap, P4 unchanged). Channel #1
+re-verified healthy at session close.
+
+---
+
+## ThinkPad 10 20C1 — Session T5 (2026-07-14) — END STATE
 
 **Short session: re-oriented (channel #1 needed a known_hosts refresh, not an actual
 problem), then executed the first of T4's two queued next-steps — shrank `C:` to free

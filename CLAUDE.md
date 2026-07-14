@@ -50,10 +50,13 @@ ThinkPad session and any time context may have been lost (new session / compact 
 - Hardened + proven: sshd Auto-start + auto-restart on failure; persistent firewall rule;
   pubkey+password auth both on; **survived a full reboot (back in 26s, no login)**; AC
   *and DC (battery)* sleep-after both disabled (T7, 2026-07-14 — AC=0 alone wasn't
-  enough since the tablet runs on battery a lot; DC=0 stops it dropping into Connected
-  Standby, which was silently killing SSH reachability with the screen off). Display
-  still turns off normally (separate, untouched timeout) — only the sleep/standby timer
-  changed. Details in memory `[[thinkpad10-20c1-boot-blocked]]`.
+  enough since the tablet runs on battery a lot). **Partial fix only**: this stops full
+  Connected-Standby entry via the idle timer, but SSH can still drop when the screen
+  turns off even with DC=0 confirmed holding and no Kernel-Power sleep/wake event logged
+  — a display-off-triggered device-power-management path (likely the SD host
+  controller, not the WiFi NIC) is the suspected remaining cause, not yet fixed. If
+  channel #1 goes unreachable, waking the tablet (screen on) reliably recovers it.
+  Details in memory `[[thinkpad10-20c1-boot-blocked]]`.
 - Remote PowerShell quoting is painful over cmd — pipe scripts via stdin:
   `ssh thinkpad10 'powershell -NoProfile -Command -' < script.ps1`.
 

@@ -82,6 +82,23 @@ left idle with the screen off, since the system no longer suspends into Connecte
 Standby — accepted, since staying reachable over channel #1 matters more for this
 project than idle battery life. `CLAUDE.md`'s device facts updated to say "AC and DC".
 
+**Follow-up, same session: fix is real but partial.** Hit the "asleep" symptom a third
+time *after* applying the DC=0 fix — re-verified `powercfg /q` still showed DC=0
+(holding correctly, not reverted) and `Get-WinEvent` found no `Kernel-Power`
+sleep/wake transitions in the preceding 40 minutes, meaning the system did **not** go
+through the normal full-standby path this time either. Conclusion: something tied more
+directly to the **display turning off** (independent of the `SUB_SLEEP` idle countdown)
+is suspending the WiFi/SDIO radio on this hardware — a known class of quirk on
+Connected-Standby-only Bay Trail firmware, where individual device classes (e.g. the SD
+host controller carrying the SDIO WiFi chip) get power-managed on display-off
+separately from the system-wide sleep timer. Likely next lead (not yet investigated):
+the SD host controller's own Device Manager power settings, not the WiFi NIC's (already
+checked and fine — Maximum Performance, `AllowComputerToTurnOffDevice: Unsupported`).
+**User decision: leave it here for this session** — the DC=0 fix is a real, kept
+improvement (prevents full Connected-Standby entry, not core to the ThinkPad10 bring-up
+goal), full resolution deferred, not blocking anything (channel #1 always recovers fine
+once the tablet is woken).
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
 1. Write the concrete, reviewed `sgdisk` partition-write command sequence as its own

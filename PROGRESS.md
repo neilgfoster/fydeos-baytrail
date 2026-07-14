@@ -10,9 +10,13 @@
 
 ## ThinkPad 10 20C1 — Session T4 (2026-07-14) — END STATE (resume here)
 
-**No disk/boot changes. Two things happened: (1) rebuilt SSH channel #1 access in a fresh
-Claude Code sandbox that started with empty `~/.ssh`/memory, (2) decided to skip the
-UEFI-level USB re-check T3 had queued up, and refined the Phase-2 channel-#2 design.**
+**Big session. No destructive disk changes throughout, but a lot happened: (1) rebuilt SSH
+channel #1 access in a fresh Claude Code sandbox that started empty, (2) skipped T3's
+queued UEFI-level USB re-check, (3) designed, built, and real-hardware-debugged a full
+channel-#2 rescue image from scratch (6 bugs found and fixed), (4) proved it as a truly
+independent fallback via the physical firmware Boot Menu, which (5) satisfied and lifted
+CLAUDE.md's NEVER-BREAK-SSH hard rule. See the dated subsections below for the full trail;
+this is the single biggest jump the project has made since T2's initial SSH bring-up.**
 
 ### Session-environment gotcha (not a device problem)
 This session's sandbox had a completely empty `~/.ssh` (no `thinkpad10` key, no config, no
@@ -192,6 +196,17 @@ independent of Windows entirely.
 2. Hand-place the ChromeOS partitions + install FydeOS to the eMMC region, per the
    Phase-2 plan (`PROGRESS.md` T4 "DRAFT PHASE-2 PLAN", now not-so-draft). `Rescue
    Recovery` / channel #2 remains the fallback throughout.
+
+**State at session close:** repo committed and pushed through `277ae1b`. Firmware
+boot manager: pristine 6-entry baseline + one new permanent `Rescue Recovery` entry
+(no `bootsequence` override, Windows still fully-automatic default). No eMMC/disk
+changes made all session. **Device network state at close: not reachable** (neither
+Windows nor the rescue image answered a port-22 probe) — most likely idle/WiFi-timed-out
+in the rescue image's local shell (which stays up indefinitely, `while true; do /bin/sh;
+done`) or simply powered off; not investigated further since nothing destructive is at
+risk either way. Next session: run `scripts/thinkpad-ssh.sh` first as usual — if channel
+#1 doesn't respond, a physical check (is it awake, is it sitting in the rescue shell) is
+the first move before assuming anything is actually wrong.
 
 ---
 

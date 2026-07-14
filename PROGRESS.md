@@ -74,16 +74,36 @@ RUNNING/AUTO_START) before booting into the rescue image. Untouched throughout t
 rescue-image work since; expected to be unaffected next Windows boot (its own 4
 partitions untouched, new partitions in the gap are simply invisible to Windows).
 
+### ✅ Windows boot-back confirmed clean (same session, after the write)
+Hard power-off from the rescue image (physical, per the known `reboot`/`poweroff`
+limitation) → normal power-on → Windows came up automatically as the untouched default.
+Verified over channel #1 (after refreshing `known_hosts` for the dropbear→OpenSSH host-key
+swap, same documented gotcha as prior sessions):
+- `sshd`: `Running`. Hostname: `Lenovo-PC`.
+- `Get-Disk -Number 0`: GPT, 62,537,072,640 bytes (58.24 GB), `OperationalStatus Online`,
+  `HealthStatus Healthy`.
+- `Get-Partition -DiskNumber 0`: partitions 1–3 (ESP/MSR/`C:`) and 4 (Recovery) unchanged
+  in size and offset. All 11 new partitions (5–15) visible as inert `Unknown`-type
+  entries at exactly the sizes/offsets the plan specified — Windows doesn't recognize
+  ChromeOS type-GUIDs, so it lists them without mounting or touching them, as expected.
+  `C:` retained its drive letter.
+- Also re-hit (and correctly diagnosed, not chased as a new bug) the known
+  `find-thinkpad.sh` stderr-swallowing gotcha (T5): its LAN-scan fallback reported "NOT
+  FOUND" mid-verification purely because of the same host-key swap, not real absence —
+  resolved by checking `ssh -v` banner + `ssh-keygen -R` manually, same as documented.
+
+**Windows-side write-triggered risk is now fully closed out**: the `sgdisk` write is
+confirmed not to have perturbed Windows in any observable way — clean boot, healthy
+disk, correct partitions, sshd back up on the same IP.
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
-1. Boot Windows normally once and confirm it comes up clean (sanity check that adding
-   partitions 5–15 to the live GPT didn't perturb anything Windows-side) — not yet done
-   this session, the tablet was left in the rescue image at session close (see below).
-2. Filesystem creation: `mkfs.ext4` (or whichever FS ChromeOS/FydeOS STATE/ROOT-A expect
+1. Filesystem creation: `mkfs.ext4` (or whichever FS ChromeOS/FydeOS STATE/ROOT-A expect
    — confirm against the SD card reference image) on STATE (15) and populate ROOT-A (6)
    with the actual FydeOS rootfs payload. This is PROGRESS.md's long-standing "step 2" /
-   deferred item #3 from T6, now unblocked since partitions exist for real.
-3. Design and stage the GRUB boot config change (Iconia-pattern `root=PARTUUID=` using
+   deferred item #3 from T6, now unblocked since partitions exist for real and Windows
+   boot-back is confirmed clean.
+2. Design and stage the GRUB boot config change (Iconia-pattern `root=PARTUUID=` using
    ROOT-A's recorded PARTUUID `F2E33B09-C91E-4469-A3BB-6661E0367944`) — per
    `PARTITION-DESIGN.md`'s "Chosen approach" (boot off existing ESP, no new EFI-SYSTEM
    partition). This is a boot-order-adjacent change to the ESP GRUB owns — needs its own
@@ -91,14 +111,12 @@ partitions untouched, new partitions in the gap are simply invisible to Windows)
 
 **State at session close:** repo committed through this entry (plan file itself stays at
 `~/.claude/plans/thinkpad10-t8-sgdisk-write.md`, per existing convention — not copied
-into the repo). eMMC (Disk 0): P1–P4 unchanged (byte-verified), **11 new partitions
-(GPT 5–15) now live** in the former 14.74 GB gap per the table above — kernel hasn't
-re-read the table yet (takes effect next reboot/`partprobe`; harmless, no risk). No
+into the repo). eMMC (Disk 0): P1–P4 unchanged (byte-verified twice — once from the rescue
+image's `sgdisk -p`, once independently from Windows' own `Get-Partition`), **11 new
+partitions (GPT 5–15) live** in the former 14.74 GB gap per the table above. No
 filesystems created yet, no data written into any of the new partitions — GPT entries
-only. Tablet was left booted in the rescue image (channel #2) at session close, not yet
-rebooted back to Windows to confirm a clean boot with the new table — flagged as the
-first thing to check next session. Channel #1 was healthy at session start; not
-re-verified after since the rescue image was used exclusively from that point on.
+only. Tablet rebooted back to Windows and confirmed healthy/clean this session — not left
+in the rescue image. Channel #1 confirmed healthy at session close.
 
 ---
 

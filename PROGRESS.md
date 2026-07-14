@@ -8,7 +8,80 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T6 (2026-07-14) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T7 (2026-07-14) — END STATE (resume here)
+
+**Re-staged T6's `sgdisk`-bundled rescue image onto the tablet and boot-tested it on
+real hardware — PASSED. Promoted it to the live `Rescue Recovery` slot. No `sgdisk`
+partition-write commands run against the eMMC — that remains fully deferred, per plan.**
+
+### Approach: prove-new-before-deprecating-old, not an in-place overwrite
+First plan draft would have overwritten the proven `rescuex64.efi` directly. User
+flagged this ("must not impact ability to boot windows, or the recovery image stored in
+EFI") — revised to stage the candidate under a new filename
+(`S:\EFI\Rescue\rescuex64-t6.efi`, 24,220,672 bytes) alongside the untouched proven one
+(23,290,880 bytes, byte-identical before/after), boot-test the candidate under its own
+**disposable one-time** firmware boot entry (`bcdedit /copy {bootmgr}` → new GUID
+`Rescue Test T6`, `bcdedit /set {fwbootmgr} bootsequence <guid>` — same technique T3/T4
+already proved safe), and only promote after a real pass. This is now the standing
+pattern for any future rescue-image update — see memory
+`feedback_plan-before-executing-disk-changes` addendum.
+
+### Boot-test: PASSED
+Physical power-off → power-on (one-time `bootsequence` auto-selected the candidate, no
+Boot Menu interaction needed) → WiFi join → dropbear password auth (existing
+`rescue-shadow.txt` password, unchanged) → SSH reachable at `192.168.1.133`. Confirmed:
+`sgdisk --version` → `GPT fdisk (sgdisk) version 1.0.9` (the actual pass/fail signal —
+the new binary + its bundled `libuuid`/`libpopt`/`libstdc++` resolve and run correctly
+on real hardware, not just in the build sandbox). Also: `uname -r` →
+`6.6.99-g7232af57f054`, `wlan0` had a real DHCP lease — no regression from the larger
+initramfs. Per T4's known limitation, did **not** `reboot`/`poweroff` from inside the
+rescue shell (unreliable); user did a hard power-off and powered back into Windows
+normally.
+
+### Promotion (after the pass) + cleanup
+Single SSH session (`mountvol S: /s` ... `/d`, chained per T4's session-scoping gotcha):
+renamed the old proven `rescuex64.efi` → `rescuex64-t4proven.efi.bak` (kept as an
+instant-rollback copy, not deleted) and the candidate `rescuex64-t6.efi` →
+`rescuex64.efi` — so the **existing, already-proven** persistent `Rescue Recovery`
+firmware entry now serves the new binary purely via the filename it already pointed at,
+with **zero `bcdedit` change to that entry**. Deleted the disposable `Rescue Test T6`
+BCD entry afterward (its one-time `bootsequence` had already self-consumed after the
+test boot) — firmware confirmed back to the exact T4/T5 baseline: pristine 6 entries +
+the one persistent `Rescue Recovery` entry, nothing else.
+
+### Gotcha hit this session: host-key swap when switching Windows ↔ rescue image
+Every switch between Windows sshd and the rescue image's dropbear changes the SSH host
+key at the same IP (documented in memory `[[thinkpad10-20c1-boot-blocked]]`, re-hit
+here in both directions). Each time, verified the banner (`ssh -v`) before clearing
+`known_hosts` — `OpenSSH_for_Windows_10.0` vs `dropbear_2022.83` are unambiguous, so
+this is a real "different service", not confusable with a MITM. Also hit T4's other
+known issue once: `scripts/thinkpad-ssh.sh` timed out right after the promotion step —
+turned out to be the tablet in Connected-Standby sleep (screen off), not a real problem;
+resolved by the user physically waking it. Nothing to fix in tooling; just re-confirms
+these are expected, already-documented behaviors, not new bugs.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Write the concrete, reviewed `sgdisk` partition-write command sequence as its own
+   plan (final sector math off a live `blockdev --getss` + `sgdisk -p` read of the real
+   eMMC from inside the now-`sgdisk`-capable `Rescue Recovery` image), get sign-off,
+   then execute with the `--backup`/pre-post-diff safety net designed in T6's
+   `PARTITION-DESIGN.md`.
+2. Only after partitions exist for real: filesystem creation + FydeOS install, per the
+   (still-draft) Phase-2 plan in T4's section below.
+
+**State at session close:** repo committed and pushed (this entry). ESP:
+`S:\EFI\Rescue\rescuex64.efi` is now the `sgdisk`-bundled T6 build (24,220,672 bytes),
+`rescuex64-t4proven.efi.bak` kept as rollback, `rescue-shadow.txt` unchanged. Firmware:
+pristine 6-entry baseline + persistent `Rescue Recovery` only (no leftover temp
+entries), Windows still the untouched automatic default. Disk 0 partitions: unchanged
+from T5/T6 (P1–P2 unchanged, P3 `C:` 34.00 GB, ~14.74 GB unallocated gap, P4 unchanged)
+— no `sgdisk` write against the eMMC happened this session. Channel #1 confirmed
+healthy at session close.
+
+---
+
+## ThinkPad 10 20C1 — Session T6 (2026-07-14) — END STATE (superseded by T7 above)
 
 **Designed T5's queued "hand-place ChromeOS partitions" step from scratch (repo-only —
 no ThinkPad eMMC writes this session). Confirmed the two-phase goal explicitly: Phase A

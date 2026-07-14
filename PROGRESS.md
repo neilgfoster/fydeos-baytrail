@@ -14,9 +14,9 @@
 problem), then executed the first of T4's two queued next-steps — shrank `C:` to free
 eMMC space. Then, before starting partition design, catalogued the device's hardware
 IDs and vendor firmware straight from Windows while it's still the intact reference —
-found concrete new driver/firmware leads for Bluetooth, NFC, sensors, and confirmed
-the "no NVRAM needed" Wi-Fi finding. No ChromeOS partitioning yet; that remains fully
-undesigned.**
+found concrete new driver/firmware leads for Bluetooth, NFC, sensors, buttons, and
+HDMI, and confirmed the "no NVRAM needed" Wi-Fi finding. No ChromeOS partitioning yet;
+that remains fully undesigned.**
 
 ### Re-orient note: stale known_hosts, not a real channel-#1 problem
 `scripts/thinkpad-ssh.sh` initially reported the tablet "NOT FOUND" on the LAN scan —
@@ -90,6 +90,46 @@ sshd or the disk. Full writeup and raw data: `boards/thinkpad10-20c1/reference/`
   `reference/README.md`.
 - Channel #1 re-verified healthy before and after this work.
 
+### ✅ Follow-on catalogue: buttons, LEDs, ports, HDMI — DONE (same session)
+User prompted for the pieces the first pass missed: cameras/firmware were already
+covered, but buttons, LEDs, and the rest of physical I/O weren't. Second read-only pass
+over the same PnP dump (no new device query needed) plus one live re-scan:
+
+- **Hardware buttons:** GPIO-driven cluster (`ACPI\INTCFD9`, Microsoft's in-box
+  `msgpiowin32.sys`) surfaced as a HID keyboard collection — volume/rotation-lock keys,
+  separate from the standard ACPI Fixed Feature power button. No firmware; exact
+  GPIO-pin-to-button mapping lives in the DSDT, not exposed to Windows — needs DSDT
+  inspection or real-hardware testing later (likely `soc_button_array`/`intel_vbtn` on
+  the Linux side).
+- **LED indicators (charge/status):** none found as OS-visible devices at all — most
+  likely hardwired to the PMIC/EC with no driver involvement, so nothing to source.
+- **Camera flash:** separate TI LM3554 chip (`ACPI\INTCF1C`) tied to the rear camera,
+  folded into the existing Cameras row — rises or falls with `atomisp` support generally.
+- **SD card slot, SIM slot, dock connector, headset jack:** all catalogued; SD slot
+  confirmed to enumerate at the OS level (doesn't change T3's "not firmware-bootable"
+  finding); SIM has no distinct device (handled inside the WWAN modem); dock and jack
+  route through already-covered subsystems.
+- **Micro-HDMI — caught and corrected a wrong finding.** First pass concluded (from the
+  static PnP dump) that there was no external video-out port at all. User corrected this
+  — the port physically exists. Root cause: Windows only enumerates the HDMI
+  video/audio devices when something is actually connected, and nothing was plugged in
+  during the original scan, so the absence was a scan artifact, not a real finding.
+  **Re-scanned live over channel #1 with an external display plugged into the port:**
+  confirmed working, both video (`Generic PnP Monitor`) and audio (`LG TV SSCR2 (Intel
+  SST Audio Device (WDM))` HDMI endpoint) appeared immediately. Bonus: this scan also
+  revealed the internal panel's identity for the first time — `DISPLAY\LEN4100`,
+  1920x1200, Lenovo.
+- All findings folded into `hardware-status.md`; second scan (HDMI connected) saved
+  alongside the original in `reference/`. Channel #1 re-verified healthy throughout and
+  at session close.
+
+**Lesson for future device cataloguing on this or any board:** a static PnP/device
+dump only shows what's *connected or active at scan time* — ports/peripherals that
+need something plugged in (HDMI, USB devices, SD cards, etc.) will read as "absent"
+even when the hardware is fully present and working. Don't conclude a port doesn't
+exist from a negative grep result alone; note it as "not observed" instead, and
+re-scan with the peripheral attached before ruling anything out.
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live (per the note above, a
    "NOT FOUND" result may just be a stale `known_hosts` entry; check with `ssh -v` before
@@ -108,11 +148,12 @@ sshd or the disk. Full writeup and raw data: `boards/thinkpad10-20c1/reference/`
    per the (still-draft) Phase-2 plan in T4's section below. `Rescue Recovery` remains the
    fallback throughout.
 
-**State at session close:** repo committed and pushed (`a758c84`, on top of the shrink's
-`4287706`). Firmware/boot config unchanged from T4's close (pristine layout + persistent
-`Rescue Recovery` entry, Windows default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB,
-new ~14.74 GB unallocated gap
-before P4, P4 unchanged. Channel #1 confirmed healthy at session close.
+**State at session close:** repo committed and pushed through `bb596bf` (shrink `4287706`
+→ hardware catalogue `a758c84`/`dc6f159` → buttons/LEDs/ports/HDMI follow-on `bb596bf`).
+Firmware/boot config unchanged from T4's close (pristine layout + persistent `Rescue
+Recovery` entry, Windows default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB, new
+~14.74 GB unallocated gap before P4, P4 unchanged. Channel #1 confirmed healthy at
+session close.
 
 ---
 

@@ -1,0 +1,125 @@
+#!/bin/sh
+# PID 1 for the ThinkPad 10 20C1 RESCUE image (channel #2). See PROGRESS.md T4 and
+# /home/neil/.claude/plans/zesty-waddling-fern.md for the full design. POSIX sh only
+# (runs under busybox ash) - no bashisms.
+#
+# Flow: mount basics -> mount the ESP (to read/write the password-hash file) -> prompt
+# locally for WiFi (never baked in, never persisted) -> start dropbear (password-auth
+# only, no baked keys) -> unconditionally drop to a local root shell on the console. The
+# local shell at the end is deliberate: physical possession is treated as a higher trust
+# tier than a network credential, so it needs no password (this is the documented
+# password-loss recovery path).
+
+export PATH=/bin:/sbin
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev 2>/dev/null   # CONFIG_DEVTMPFS_MOUNT should do this already
+mount -t tmpfs tmpfs /tmp
+ifconfig lo up
+
+echo "=== ThinkPad 10 20C1 rescue environment ==="
+echo "kernel: $(uname -r)"
+
+# --- find + mount the ESP (holds the persisted password-hash file) ---
+# The ESP's exact device node isn't hardcoded (mmc block-device enumeration order isn't
+# guaranteed) - probe partition 1 on every mmcblk device and mount whichever one has the
+# marker file we know is on this board's ESP (T3 dossier: LenovoBT.EFI). VERIFY/ADJUST
+# this against the real device on first boot (T4 plan step 4) if enumeration differs.
+ESP_DEV=""
+for dev in /dev/mmcblk*p1; do
+  [ -e "$dev" ] || continue
+  mkdir -p /mnt/esp
+  if mount -t vfat -o ro "$dev" /mnt/esp 2>/dev/null; then
+    if [ -e /mnt/esp/LenovoBT.EFI ] || [ -e /mnt/esp/EFI/Boot/bootx64.efi ]; then
+      ESP_DEV=$dev
+      umount /mnt/esp
+      break
+    fi
+    umount /mnt/esp
+  fi
+done
+if [ -n "$ESP_DEV" ]; then
+  mount -t vfat -o rw,uid=0,gid=0 "$ESP_DEV" /mnt/esp
+  echo "ESP found: $ESP_DEV -> /mnt/esp"
+else
+  echo "WARNING: could not find/mount the ESP - password persistence unavailable this boot"
+fi
+SHADOW_FILE=/mnt/esp/EFI/Rescue/rescue-shadow.txt
+
+# --- WiFi: always interactive, never baked in or persisted ---
+printf "Join WiFi now? [Y/n] "
+read -r ans
+if [ "$ans" != "n" ] && [ "$ans" != "N" ]; then
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    [ -e /sys/class/net/wlan0 ] && break
+    sleep 1
+  done
+  if [ -e /sys/class/net/wlan0 ]; then
+    ip link set wlan0 up
+    wpa_supplicant -B -i wlan0 -C /tmp/wpa_ctrl -c /dev/null
+    sleep 2
+    wpa_cli -p /tmp/wpa_ctrl scan >/dev/null 2>&1
+    sleep 3
+    echo "--- networks seen ---"
+    wpa_cli -p /tmp/wpa_ctrl scan_results 2>/dev/null | tail -n +2 | awk '{print $5, "\t["$1"]"}'
+    echo "----------------------"
+    printf "SSID: "
+    read -r ssid
+    printf "Passphrase (blank = open network): "
+    stty -echo
+    read -r psk
+    stty echo
+    echo
+    wpa_cli -p /tmp/wpa_ctrl terminate >/dev/null 2>&1
+    if [ -n "$psk" ]; then
+      printf 'network={\n  ssid="%s"\n  psk="%s"\n}\n' "$ssid" "$psk" > /tmp/wpa_supplicant.conf
+    else
+      printf 'network={\n  ssid="%s"\n  key_mgmt=NONE\n}\n' "$ssid" > /tmp/wpa_supplicant.conf
+    fi
+    wpa_supplicant -B -i wlan0 -c /tmp/wpa_supplicant.conf
+    udhcpc -i wlan0 -n -q
+    echo "--- wlan0 ---"
+    ip addr show wlan0
+    echo "-------------"
+  else
+    echo "WARNING: wlan0 never appeared - skipping WiFi"
+  fi
+fi
+
+# --- password: read from the ESP if set, else prompt to set one now (first boot) ---
+# (the initramfs rootfs is a writable in-memory tmpfs, so /etc/shadow can just be
+# written directly - no bind-mount dance needed)
+if [ -f "$SHADOW_FILE" ]; then
+  HASH=$(cat "$SHADOW_FILE")
+  echo "Loaded saved rescue password."
+else
+  echo "No rescue password set yet on this ESP - set one now (used for SSH login only;"
+  echo "the local console you're about to get never needs it)."
+  while true; do
+    printf "New password: "; stty -echo; read -r p1; stty echo; echo
+    printf "Confirm:      "; stty -echo; read -r p2; stty echo; echo
+    [ "$p1" = "$p2" ] && [ -n "$p1" ] && break
+    echo "Passwords didn't match (or empty) - try again."
+  done
+  HASH=$(mkpasswd -m sha512 "$p1")
+  if [ -n "$ESP_DEV" ]; then
+    mkdir -p /mnt/esp/EFI/Rescue
+    echo "$HASH" > "$SHADOW_FILE"
+    echo "Saved to $SHADOW_FILE (persists across reboots; reset it anytime over the"
+    echo "Windows SSH channel by overwriting that file - no rebuild needed)."
+  else
+    echo "WARNING: no ESP mounted - this password will NOT persist to next boot."
+  fi
+fi
+echo "root:${HASH}:19000:0:99999:7:::" > /etc/shadow
+chmod 600 /etc/shadow
+
+# --- dropbear: password-auth only (no authorized_keys shipped or generated) ---
+mkdir -p /etc/dropbear
+[ -f /etc/dropbear/dropbear_ed25519_host_key ] || echo "WARNING: no host key baked in"
+dropbear -p 22 -r /etc/dropbear/dropbear_ed25519_host_key
+echo "dropbear started - ssh root@<ip-shown-above> (password)"
+
+# --- local console: unconditional root shell (the physical-access recovery path) ---
+exec /bin/sh

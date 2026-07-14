@@ -8,7 +8,113 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T3 (2026-07-12) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T4 (2026-07-14) — END STATE (resume here)
+
+**No disk/boot changes. Two things happened: (1) rebuilt SSH channel #1 access in a fresh
+Claude Code sandbox that started with empty `~/.ssh`/memory, (2) decided to skip the
+UEFI-level USB re-check T3 had queued up, and refined the Phase-2 channel-#2 design.**
+
+### Session-environment gotcha (not a device problem)
+This session's sandbox had a completely empty `~/.ssh` (no `thinkpad10` key, no config, no
+`find-thinkpad.sh`) and empty Claude memory, despite `CLAUDE.md` assuming these persist.
+Only the git-tracked repo survives a sandbox reset. Recovered channel #1 by: password-auth
+in with the LAN fallback password (device account `myPC`, confirmed working — value kept
+in memory `[[thinkpad10-20c1-boot-blocked]]`, not this repo), generating a fresh session
+keypair, and **appending** it to `C:\ProgramData\ssh\administrators_authorized_keys`
+(additive only — the original `thinkpad10`-comment key from T2 is untouched). Recreated
+`~/.ssh/config` and `~/.ssh/find-thinkpad.sh` from the behavior `scripts/thinkpad-ssh.sh`
+expects. Full recovery recipe is now written into that memory entry so this doesn't cost a
+full round-trip again. Along the way the device was briefly unreachable because it was
+asleep (Connected-Standby) — woken physically by the user, DHCP IP unchanged
+(192.168.1.133). Nothing about the device's SSH setup was weakened; this was purely
+re-deriving local session state.
+
+### Decision: USB re-check skipped, dead-USB finding stands
+T3's queued "next session" step (re-verify the dead USB from the UEFI Shell, to rule out a
+firmware-only flag) was explicitly skipped by user decision — the OS-level finding (xHCI
+controller/root hub healthy, `ConfigManagerErrorCode=0`, installer stick still doesn't
+enumerate) is being treated as conclusive proof the port/traces are physically dead. See
+the superseded step in T3's section below (kept for reference, not planned). **USB is
+permanently out as a boot/recovery channel — no further probing planned.**
+
+### Phase-2 plan refined: channel #2 lives inside the existing ESP, no new partition
+Replaced the draft's separate ~2-4 GB RECOVERY-LINUX partition with staging a minimal
+rescue kernel+initramfs (busybox + dropbear sshd + brcmfmac WiFi + admin pubkey + fixed
+host key, unattended WiFi join) as **files inside the existing ESP's free space** (212 MB
+free of 260 MB), booted via a GRUB/EFI-stub entry the same way `shellx64.efi` is already
+staged there. Avoids repartitioning the eMMC just for channel #2. Full rationale and the
+updated partition map / mandatory sequence are in the "DRAFT PHASE-2 PLAN" section below
+(edited in place since it's a living plan, not a session log).
+
+### Rescue image BUILT and STAGED (same session, after the above) — not yet boot-tested
+Plan: `/home/neil/.claude/plans/zesty-waddling-fern.md` (interactive WiFi, no baked
+secrets; password-only dropbear auth with a resettable ESP-resident hash file; physical
+console always gets an unconditional local root shell — see that file for full rationale,
+and memory `feedback_recovery-tooling-security` for the auth-design principles behind it).
+
+- **New board dir `boards/thinkpad10-20c1/`** (scaffolded from `_template`; `board.env`
+  pins `CROS_RELEASE=release-R144-16503.B` same as W4-820, `FIRMWARE_UEFI_BITNESS=64`).
+- **New `scripts/build-rescue-image.sh --board <id> {clone,config,initramfs,build}`** —
+  separate from `build-kernel-standalone.sh`: clones the same openFyde kernel-6.6 git
+  source but configs from upstream `x86_64_defconfig` + a small
+  `rescue/config/rescue-minimal.config` fragment (Bay Trail LPSS/pinctrl/i2c, ACPI,
+  MMC_SDHCI_ACPI, CFG80211/BRCMFMAC built-in, EFI_STUB, INITRAMFS_SOURCE, VFAT/EFI_PARTITION
+  for mounting the ESP, FB_EFI + USB_HID for a local console) rather than the full
+  ChromeOS kernel flavour.
+- **Initramfs**: `busybox-static` + `dropbear-bin` + `wpasupplicant` from Debian apt
+  packages (ldd-bundled shared libs), overlaid with `boards/thinkpad10-20c1/rescue/skel/`
+  (tracked in git: the `init` PID-1 script + `/etc` templates). Build-time-assembled
+  `rescue/initramfs/`, `rescue/hostkey/`, `rescue/out/` are gitignored (binaries, not
+  source).
+- **WiFi firmware**: `brcmfmac43241b4-sdio.bin` via Debian's `firmware-brcm80211`
+  (needs the `non-free-firmware` apt component enabled). **No NVRAM/SROM file bundled** —
+  investigated two sources and both were dead ends: Debian's package has zero coverage
+  for this chip, and the device's own live Windows driver (`oem24.inf`) references
+  `bcm943241ipaagb_p100*.txt` but **that file does not actually exist** on the tablet's
+  filesystem (checked directly over SSH) — calibration appears embedded in the
+  `43241b4rtecdc.bin`/`brcmfmac43241b4-sdio.bin` dongle image itself for this SKU. Whether
+  brcmfmac needs a separate NVRAM anyway is unverified until boot-test. Logged in
+  `boards/thinkpad10-20c1/hardware-status.md`.
+- **Built successfully**: `rescuex64.efi`, 23,000,064 bytes, kernel 6.6.99-g7232af57f054.
+  Confirmed a genuine valid PE32+/EFI executable by checking the boot-protocol
+  `pe_header` field (offset 0x3c) points to a real `PE\0\0` signature — `file`(1) alone is
+  NOT a reliable check here, it classifies EFI-stub bzImages as "Linux kernel bzImage"
+  even when they're simultaneously valid PE images (the build script's verification was
+  fixed to do the offset check directly after first getting this wrong).
+- **Staged on the device**: `S:\EFI\Rescue\rescuex64.efi` (scp to a normal path, then
+  `move` into the mounted ESP — `mountvol S:` turned out to be **session-scoped over
+  SSH**, must chain mount + operation in one connection or the drive letter vanishes).
+  167.7 MB still free on the ESP afterward. No boot-order/default changes made.
+- **🔴 Found pre-existing, UNDOCUMENTED artifacts on the ESP**: `S:\EFI\recovery\`
+  (`recovery.efi` 19.9 MB, `grubx64.efi`, `grub.cfg`) and `S:\recovery\`
+  (`dropbear_ed25519_host_key`, `passwd.hash`, `launch.txt`), all dated **2026-07-12**
+  (T3's session date) — but T3's own log above says nothing about this and explicitly
+  closes with "No disk changes." Nearly identical in shape to this session's rescue-image
+  work (dropbear host key + password hash file). **User confirmed (2026-07-14): "earlier
+  attempt, safe to replace"** — left in place untouched (harmless, unused by the new
+  `S:\EFI\Rescue\` path) rather than deleted. Flagging here so a future session doesn't
+  get surprised by it again.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live (or follow the recovery
+   recipe in memory `[[thinkpad10-20c1-boot-blocked]]` if `~/.ssh` is empty again).
+1. **Boot-test the staged rescue image** (needs the user physically at the device for the
+   local WiFi/password console prompts): add a ONE-TIME `{fwbootmgr} bootsequence` entry
+   for `S:\EFI\Rescue\rescuex64.efi` (same pattern as T3's `shellx64.efi` test — Windows
+   stays default), reboot, join WiFi + set the rescue password when prompted, confirm
+   `ssh root@<ip>` (password) reaches it from another machine **while Windows sshd stays
+   up in parallel**. Reboot again to confirm the saved password persists. Delete the temp
+   boot entry afterward. If WiFi doesn't associate, the NVRAM gap above is the first
+   suspect — revisit sourcing calibration data.
+2. Once proven twice, record it PROVEN in `CLAUDE.md` (lifts the hard-rule blocking
+   condition) and here.
+3. **Shrinking C: is still deferred** — only needed to free eMMC space for the ChromeOS
+   region (mandatory-sequence step 4, installing FydeOS), which comes after channel #2 is
+   proven. Revisit after step 2 above.
+
+---
+
+## ThinkPad 10 20C1 — Session T3 (2026-07-12) — END STATE
 
 **Phase 1 read-only probing DONE — full hardware/firmware dossier gathered over SSH
 channel #1. No disk/boot changes. One finding overturns the prior plan (Secure Boot).**
@@ -81,40 +187,56 @@ SSH proven IN PARALLEL) is now NON-NEGOTIABLE before Windows sshd or its disk is
 
 ### 📐 DRAFT PHASE-2 PLAN (eMMC-only install, SSH-safe) — to refine next sessions
 Core constraint: no external boot medium (USB dead, SD firmware-invisible) → everything on
-the eMMC; the on-eMMC recovery partition + our GRUB is the ENTIRE safety net. Do NOT use the
-stock whole-disk installer. Prove-new-before-deprecating-old at every step.
+the eMMC; the on-eMMC recovery + our GRUB is the ENTIRE safety net. Do NOT use the stock
+whole-disk installer. Prove-new-before-deprecating-old at every step.
+
+**Revised (T4, 2026-07-14): channel #2 lives INSIDE the existing ESP — no new partition.**
+Original draft below called for a new ~2-4 GB RECOVERY-LINUX partition. Refined approach:
+build a minimal rescue image (small statically-linked kernel + initramfs — busybox +
+dropbear sshd + brcmfmac WiFi driver/firmware + admin pubkey + fixed host key, unattended
+WiFi join) and stage it as **files inside the existing ESP's free space** (P1, 260 MB FAT32,
+212 MB free — plenty of headroom for a compressed rescue initramfs), booted via a GRUB/EFI
+stub entry, same way `shellx64.efi` is already staged there. Advantages: zero eMMC
+repartitioning for channel #2 (lower risk, nothing to shrink further just for this), it's
+already proven that firmware happily boots arbitrary EFI binaries off this ESP (T3's
+`shellx64.efi` one-time-boot test), and it's trivially outside ChromeOS's A/B set since
+ChromeOS/FydeOS never touches the ESP's existing files (only writes its own boot entries —
+which is why we still must not let postinst manage the ESP, see hardening point 3 below).
 
 **Target eMMC partition map (58 GB, controlled — not stock wipe):**
 - P1  ESP (existing 260 MB, FAT32) — **we own GRUB here** (`\EFI\BOOT\BOOTX64.EFI` = our
-  GRUB); keep `shellx64.efi` staged too. GRUB config authoritative for what boots.
-- P?  **RECOVERY-LINUX (channel #2, NEW, ~2-4 GB)** — independent minimal Linux, read-only
-  rootfs, OUTSIDE ChromeOS's A/B set + never mounted by FydeOS. Baked in: sshd + admin
-  pubkey, brcmfmac + WiFi creds, fixed host key → auto-joins WiFi + sshd pre-login,
-  unattended, survives reboot. This is what makes SSH survive FydeOS updates/powerwash.
+  GRUB); keep `shellx64.efi` staged too. GRUB config authoritative for what boots. **Also
+  holds the channel #2 rescue kernel+initramfs** (new, see above) — no separate partition.
 - ChromeOS region (bounded, hand-placed — NOT whole-disk): KERN-A/B, ROOT-A/B, STATE, etc.
   Placed into freed space (shrink C: → later reclaim Windows) rather than a stock GPT wipe.
 - Consider fate of the 9 GB Lenovo recovery (P4): reclaim for space, or keep early on.
 
 **SSH-survival hardening (answers "protect SSH even if FydeOS self-updates dodgily"):**
-1. Channel #2 recovery-Linux is independent of ChromeOS partitions → updates/powerwash can't
-   touch it. 2. **Disable FydeOS auto-update** (mask `update_engine`, as on W4-820) → no
-   self-update at all. 3. **We own the ESP/GRUB**; do NOT let ChromeOS postinst manage the
-   ESP (it can rewrite boot entries). 4. GRUB keeps a RECOVERY entry always; firmware Boot
-   Menu (volume buttons) is the physical last resort.
+1. Channel #2 rescue image lives in the ESP, which ChromeOS/FydeOS never mounts or
+   writes files into → updates/powerwash can't touch it. 2. **Disable FydeOS auto-update**
+   (mask `update_engine`, as on W4-820) → no self-update at all. 3. **We own the ESP/GRUB**;
+   do NOT let ChromeOS postinst manage the ESP (it can rewrite boot entries — must confirm
+   it can't clobber our added files, or defend against that). 4. GRUB keeps a RESCUE entry
+   always; firmware Boot Menu (volume buttons) is the physical last resort.
 
 **Mandatory sequence (never hand off blind):**
-1. Shrink C: (33 GB free) to free eMMC space — reversible, Windows + sshd intact.
-2. Create + populate RECOVERY-LINUX partition; install our GRUB to the ESP with entries for
-   Windows (default) + Recovery. Windows sshd STILL primary — nothing retired yet.
-3. **PROVE channel #2:** boot recovery-Linux, confirm `ssh` into it over WiFi works +
-   survives a reboot unattended, WHILE Windows sshd is still alive. Record as PROVEN in
-   CLAUDE.md (this is the line that finally lifts the hard rule).
-4. ONLY THEN: hand-place the ChromeOS partitions + install FydeOS to the eMMC region.
-   Recovery-Linux remains the fallback throughout.
+1. Shrink C: (33 GB free) to free eMMC space for the ChromeOS region — reversible, Windows
+   + sshd intact.
+2. Build the rescue kernel+initramfs image; stage it + a GRUB entry on the existing ESP
+   (alongside `shellx64.efi`). Windows sshd STILL primary — nothing retired yet, no new
+   partition created.
+3. **PROVE channel #2:** boot the ESP-staged rescue image, confirm `ssh` into it over WiFi
+   works + survives a reboot unattended, WHILE Windows sshd is still alive. Record as
+   PROVEN in CLAUDE.md (this is the line that finally lifts the hard rule).
+4. ONLY THEN: hand-place the ChromeOS partitions + install FydeOS to the eMMC region. The
+   ESP-staged rescue image remains the fallback throughout.
 
-### ▶ NEXT SESSION — re-verify the dead USB from UEFI (rule out a firmware flag)
-Before committing to "no external boot medium", be 100% sure the USB port is truly physical,
-not a stuck/misconfigured firmware state. `shellx64.efi` is already staged on the ESP.
+### ▶ NEXT SESSION (T3's plan — SKIPPED by decision in T4, see below)
+Originally: re-verify the dead USB from the UEFI Shell (rule out a firmware-only flag)
+before committing to "no external boot medium". **Decision in T4 (2026-07-14): not
+needed** — the OS-level result above (xHCI healthy, port/traces confirmed dead) is
+treated as conclusive; skipping straight to the eMMC-only Phase-2 plan. Left here for
+reference in case a future session wants the extra rigor:
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
 1. Re-add the ONE-TIME `{fwbootmgr} bootsequence` entry for `S:\EFI\Shell\shellx64.efi`
    (same as T3; Windows stays default), reboot into the UEFI Shell WITH the installer stick

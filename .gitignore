@@ -15,6 +15,12 @@ boards/*/install/iconia-injtest
 # downloaded release bundles staged by resolve-artifacts.sh
 .artifact-cache/
 
+# rescue-image build staging: assembled from apt packages (busybox-static, dropbear-bin,
+# wpasupplicant + libs) + boards/*/rescue/skel/ overlay — never commit the binaries.
+# boards/*/rescue/skel/ (source: init script, config templates) IS tracked.
+boards/*/rescue/initramfs/
+boards/*/rescue/hostkey/
+
 # proprietary Widevine CDM blob — staged for rootfs bake, md5-pinned (see the
 # README beside it). NOT redistributed in git; re-sourced per that README.
 boards/*/stage/opt/google/chrome/WidevineCdm/**/libwidevinecdm.so

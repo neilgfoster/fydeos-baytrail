@@ -12,7 +12,11 @@
 
 **Short session: re-oriented (channel #1 needed a known_hosts refresh, not an actual
 problem), then executed the first of T4's two queued next-steps — shrank `C:` to free
-eMMC space. No ChromeOS partitioning yet; that remains fully undesigned.**
+eMMC space. Then, before starting partition design, catalogued the device's hardware
+IDs and vendor firmware straight from Windows while it's still the intact reference —
+found concrete new driver/firmware leads for Bluetooth, NFC, sensors, and confirmed
+the "no NVRAM needed" Wi-Fi finding. No ChromeOS partitioning yet; that remains fully
+undesigned.**
 
 ### Re-orient note: stale known_hosts, not a real channel-#1 problem
 `scripts/thinkpad-ssh.sh` initially reported the tablet "NOT FOUND" on the LAN scan —
@@ -58,6 +62,34 @@ work — likely `cgpt`-based, informed by dumping the SD card's existing 12-part
 ChromeOS installer clone (T3) as a layout/size template — and needs its own research and
 design pass, not a quick follow-on to this session's shrink.
 
+### ✅ Windows hardware/firmware catalogue — DONE (same session, after the shrink)
+Before starting the ChromeOS partition-placement design, catalogued the device from
+Windows over channel #1 while it's still the intact, fully-functional reference OS —
+purely read-only (PnP device enumeration, `pnputil`, `DriverStore` reads), no risk to
+sshd or the disk. Full writeup and raw data: `boards/thinkpad10-20c1/reference/`
+(`README.md` there explains everything); findings folded into
+`boards/thinkpad10-20c1/hardware-status.md` row-by-row.
+
+- **New concrete leads found for previously-blank rows:** Bluetooth is the Wi-Fi
+  chip's own combo silicon (BCM43241B0), over UART not SDIO — pulled its exact
+  `.hcd` patchram firmware. Sensors identified: InvenSense MPU-6500 IMU, Broadcom
+  BCM4752 GNSS. Audio and touchscreen confirmed to need **no** firmware blob at all
+  (Realtek ALC5640 codec, generic HID-I2C touchscreen) — simplifies those two.
+- **New rows added** (previously untracked): NFC (Broadcom BCM2079x, firmware
+  pulled), Cellular/WWAN (Sierra Wireless EM7345, Microsoft in-box MBIM — no
+  extraction needed), Cameras (OV2722 + IMX175 via `atomisp`, calibration pulled but
+  flagged low-priority/speculative given known Linux `atomisp` dead-end), Fingerprint
+  (Synaptics VFS6101, flagged unsupportable — no Linux driver known, not pursuing).
+- **Re-confirms T4's Wi-Fi NVRAM finding:** the live driver package for this exact
+  chip ships only `43241b4rtecdc.bin`, nothing else — no separate SROM file exists
+  for this SKU under Windows either.
+- **Gotcha worth remembering:** plain `scp` against `DriverStore\FileRepository`
+  silently truncated 2 of 9 pulled files at exactly 204,800 bytes (exit code 0, no
+  error) — always byte-verify a pulled file against Windows' own reported length;
+  don't trust a clean exit code alone. Full detail + the working base64 fallback in
+  `reference/README.md`.
+- Channel #1 re-verified healthy before and after this work.
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live (per the note above, a
    "NOT FOUND" result may just be a stale `known_hosts` entry; check with `ssh -v` before
@@ -76,9 +108,11 @@ design pass, not a quick follow-on to this session's shrink.
    per the (still-draft) Phase-2 plan in T4's section below. `Rescue Recovery` remains the
    fallback throughout.
 
-**State at session close:** repo committed and pushed (`4287706`). Firmware/boot config
-unchanged from T4's close (pristine layout + persistent `Rescue Recovery` entry, Windows
-default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB, new ~14.74 GB unallocated gap
+**State at session close:** repo not yet committed for this addendum (shrink itself was
+pushed as `4287706`; the hardware catalogue above is new, uncommitted work — commit
+next). Firmware/boot config unchanged from T4's close (pristine layout + persistent
+`Rescue Recovery` entry, Windows default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB,
+new ~14.74 GB unallocated gap
 before P4, P4 unchanged. Channel #1 confirmed healthy at session close.
 
 ---

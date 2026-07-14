@@ -1,0 +1,28 @@
+
+
+SMBIOSBIOSVersion : GWET27WW (1.27)
+Manufacturer      : LENOVO
+ReleaseDate       : 20150112000000.000000+000
+SerialNumber      : MP07C9P8
+
+
+
+
+
+Manufacturer : LENOVO
+Product      : 20C10026UK
+Version      : SKH47 I
+SerialNumber : C1KS5364TSD
+
+
+
+
+
+Manufacturer              : LENOVO
+Model                     : 20C10026UK
+OEMStringArray            : {This is the Intel BayTrail CRB Platform}
+TotalPhysicalMemory       : 4185448448
+NumberOfLogicalProcessors : 4
+
+
+

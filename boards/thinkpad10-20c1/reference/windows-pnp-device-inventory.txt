@@ -1,0 +1,1234 @@
+
+
+Class        : 
+Name         : 
+Manufacturer : 
+Status       : OK
+DeviceID     : HTREE\ROOT\0
+HardwareIds  : 
+Service      : 
+
+Class        : 
+Name         : [LG] webOS TV LQ63006LA
+Manufacturer : LG Electronics.
+Status       : OK
+DeviceID     : SWD\DAFUPNPPROVIDER\UUID:0D1FB61D-ECD4-8D06-A94B-09F5EEA1C48C
+HardwareIds  : 
+Service      : UmPass
+
+Class        : 
+Name         : ACPI Fixed Feature Button
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\FIXEDBUTTON\2&DABA3FF&3
+HardwareIds  : ACPI\FixedButton; *FixedButton
+Service      : 
+
+Class        : 
+Name         : ACPI Lid
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\PNP0C0D\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_PNP&DEV_0C0D; ACPI\PNP0C0D; *PNP0C0D
+Service      : 
+
+Class        : 
+Name         : ACPI Processor Aggregator
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\ACPI000C\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_ACPI&DEV_000C; ACPI\ACPI000C; *ACPI000C
+Service      : acpipagr
+
+Class        : 
+Name         : ACPI Thermal Zone
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\THERMALZONE\TZ00
+HardwareIds  : ACPI\ThermalZone; *ThermalZone
+Service      : 
+
+Class        : 
+Name         : ACPI x64-based PC
+Manufacturer : (Standard computers)
+Status       : OK
+DeviceID     : ROOT\ACPI_HAL\0000
+HardwareIds  : acpiapic
+Service      : \Driver\ACPI_HAL
+
+Class        : 
+Name         : bcmfn2 Device
+Manufacturer : Broadcom
+Status       : OK
+DeviceID     : SD\VID_02D0&PID_4324&FN_2\3&18BDEB84&0&0
+HardwareIds  : SD\VID_02d0&PID_4324&FN_2; SD\VID_02d0&PID_4324
+Service      : bcmfn2
+
+Class        : 
+Name         : Bluetooth Device (Personal Area Network)
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : BTH\MS_BTHPAN\5&37785D40&0&2
+HardwareIds  : BTH\MS_BTHPAN
+Service      : BthPan
+
+Class        : 
+Name         : Bluetooth Device (RFCOMM Protocol TDI)
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : BTH\MS_RFCOMM\5&37785D40&0&0
+HardwareIds  : BTH\MS_RFCOMM
+Service      : RFCOMM
+
+Class        : 
+Name         : Bluetooth Radio
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : BCMBTBUS\BLUETOOTH\4&DAB54EA&0&4097
+HardwareIds  : BCMBTBUS\BLUETOOTH
+Service      : BthMini
+
+Class        : 
+Name         : Broadcom 802.11abgn Wireless SDIO Adapter
+Manufacturer : Broadcom
+Status       : OK
+DeviceID     : SD\VID_02D0&PID_4324&FN_1\3&18BDEB84&0&0
+HardwareIds  : SD\VID_02d0&PID_4324&FN_1; SD\VID_02d0&PID_4324
+Service      : BCMSDH43XX
+
+Class        : 
+Name         : Broadcom GNSS 4752 Geolocation Sensor
+Manufacturer : Broadcom Corporation
+Status       : OK
+DeviceID     : SENSORS\BCMGNSSLOCATIONSENSOR_LNV_4752_0000\4&2B163C92&0&22
+HardwareIds  : Sensors\BcmGNSSLocationSensor_LNV_4752_0000
+Service      : WUDFRd
+
+Class        : 
+Name         : Broadcom GNSS Bus Driver - 4752
+Manufacturer : Broadcom Corporation
+Status       : OK
+DeviceID     : ACPI\LNV4752\3&DD1BFC5&0
+HardwareIds  : ACPI\VEN_LNV&DEV_4752&REV_0000; ACPI\VEN_LNV&DEV_4752; 
+               ACPI\LNV4752; *LNV4752
+Service      : BcmGnssBus
+
+Class        : 
+Name         : Broadcom Serial Bus Driver over UART Bus Enumerator
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\BCM2E55\3&36B2D927&0
+HardwareIds  : ACPI\VEN_BCM&DEV_2E55; ACPI\BCM2E55; *BCM2E55
+Service      : BtwSerialBus
+
+Class        : 
+Name         : Camera Sensor IMX175
+Manufacturer : IMX175 Camera Sensor
+Status       : OK
+DeviceID     : ACPI\INTCF1A\1
+HardwareIds  : ACPI\VEN_INT&DEV_CF1A&SUBSYS_221B17AA; ACPI\INTCF1A; *INTCF1A
+Service      : imx175
+
+Class        : 
+Name         : Camera Sensor OV2722
+Manufacturer : Camera Sensor OV2722
+Status       : OK
+DeviceID     : ACPI\INT33FB\1
+HardwareIds  : ACPI\VEN_INT&DEV_33FB&SUBSYS_221B17AA; ACPI\INT33FB; *INT33FB
+Service      : ov2722
+
+Class        : 
+Name         : Communications Port (COM1)
+Manufacturer : (Standard port types)
+Status       : OK
+DeviceID     : ACPI\PNP0501\1
+HardwareIds  : ACPI\VEN_PNP&DEV_0501; ACPI\PNP0501; *PNP0501
+Service      : Serial
+
+Class        : 
+Name         : Composite Bus Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\COMPOSITEBUS\0000
+HardwareIds  : ROOT\CompositeBus
+Service      : CompositeBus
+
+Class        : 
+Name         : D:\
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\WPDBUSENUM\_??_SD#DISK&GENERIC&SE64G&8.0#4&24B2858&0&943342B
+               1#{53F56307-B6BF-11D0-94F2-00A0C91EFB8B}
+HardwareIds  : 
+Service      : WUDFWpdFs
+
+Class        : 
+Name         : Fax
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\PRINTENUM\{9D7DBACD-D102-4149-B2DB-FFEC94371EAB}
+HardwareIds  : PRINTENUM\microsoftmicrosoft_s7d14; PRINTENUM\LocalPrintQueue; 
+               microsoftmicrosoft_s7d14
+Service      : 
+
+Class        : 
+Name         : Flash LM3554
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INTCF1C\1
+HardwareIds  : ACPI\VEN_INT&DEV_CF1C&SUBSYS_221B17AA; ACPI\INTCF1C; *INTCF1C
+Service      : Lm3554
+
+Class        : 
+Name         : Generic SE64G SD Card
+Manufacturer : (Standard disk drives)
+Status       : OK
+DeviceID     : SD\DISK&GENERIC&SE64G&8.0\4&24B2858&0&943342B1
+HardwareIds  : SD\GenDisk; GenDisk
+Service      : disk
+
+Class        : 
+Name         : Generic volume
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : STORAGE\VOLUME\_??_SD#DISK&GENERIC&SE64G&8.0#4&24B2858&0&943342B
+               1#{53F56307-B6BF-11D0-94F2-00A0C91EFB8B}
+HardwareIds  : STORAGE\Volume
+Service      : volsnap
+
+Class        : 
+Name         : Generic volume
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : STORAGE\VOLUME\{714A87FE-C7EA-11E4-8252-806E6F6E6963}#0000000C47
+               B00000
+HardwareIds  : STORAGE\Volume
+Service      : volsnap
+
+Class        : 
+Name         : Generic volume
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : STORAGE\VOLUME\{714A87FE-C7EA-11E4-8252-806E6F6E6963}#0000000018
+               500000
+HardwareIds  : STORAGE\Volume
+Service      : volsnap
+
+Class        : 
+Name         : Generic volume
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : STORAGE\VOLUME\{714A87FE-C7EA-11E4-8252-806E6F6E6963}#0000000000
+               100000
+HardwareIds  : STORAGE\Volume
+Service      : volsnap
+
+Class        : 
+Name         : Generic volume
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : STORAGE\VOLUME\{714A87FE-C7EA-11E4-8252-806E6F6E6963}#0000000010
+               500000
+HardwareIds  : STORAGE\Volume
+Service      : volsnap
+
+Class        : 
+Name         : Generic volume shadow copy
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : STORAGE\VOLUMESNAPSHOT\HARDDISKVOLUMESNAPSHOT1
+HardwareIds  : STORAGE\VolumeSnapshot
+Service      : 
+
+Class        : 
+Name         : GPIO Buttons Driver
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\INTCFD9\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_INT&DEV_CFD9; ACPI\INTCFD9; *INTCFD9
+Service      : msgpiowin32
+
+Class        : 
+Name         : GPIO Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT33FC\3
+HardwareIds  : ACPI\VEN_INT&DEV_33FC; ACPI\INT33FC; *INT33FC
+Service      : GPIO
+
+Class        : 
+Name         : GPIO Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT33FC\2
+HardwareIds  : ACPI\VEN_INT&DEV_33FC; ACPI\INT33FC; *INT33FC
+Service      : GPIO
+
+Class        : 
+Name         : GPIO Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT33FC\1
+HardwareIds  : ACPI\VEN_INT&DEV_33FC; ACPI\INT33FC; *INT33FC
+Service      : GPIO
+
+Class        : 
+Name         : GpioVirtual Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT0002\1
+HardwareIds  : ACPI\VEN_INT&DEV_0002&REV_0006; ACPI\VEN_INT&DEV_0002; 
+               ACPI\INT0002; *INT0002
+Service      : GpioVirtual
+
+Class        : 
+Name         : HID Keyboard Device
+Manufacturer : (Standard keyboards)
+Status       : OK
+DeviceID     : HID\INTCFD9&COL01\3&606D35A&0&0000
+HardwareIds  : HID\VEN_INT&DEV_CFD9&Col01; HID\INTCFD9&Col01; 
+               HID\*INTCFD9&Col01; HID_DEVICE_SYSTEM_KEYBOARD; 
+               HID_DEVICE_UP:0001_U:0006; HID_DEVICE
+Service      : kbdhid
+
+Class        : 
+Name         : HID Sensor Collection
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : HID\INV6500\4&11F9EFF7&0&0000
+HardwareIds  : HID\VEN_INV&DEV_6500; HID\INV6500; HID\*INV6500; 
+               HID_DEVICE_UP:0020_U:0001; HID_DEVICE
+Service      : SensorsHIDClassDriver
+
+Class        : 
+Name         : HID-compliant consumer control device
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : HID\INTCFD9&COL02\3&606D35A&0&0001
+HardwareIds  : HID\VEN_INT&DEV_CFD9&Col02; HID\INTCFD9&Col02; 
+               HID\*INTCFD9&Col02; HID_DEVICE_SYSTEM_CONSUMER; 
+               HID_DEVICE_UP:000C_U:0001; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-Compliant Mouse
+Manufacturer : Wacom Technology
+Status       : OK
+DeviceID     : HID\WCOM0008&COL01\4&1AA55F3D&0&0000
+HardwareIds  : HID\VEN_WCOM&DEV_0008&Col01; HID\WCOM0008&Col01; 
+               HID\*WCOM0008&Col01; HID_DEVICE_SYSTEM_MOUSE; 
+               HID_DEVICE_UP:0001_U:0001; HID_DEVICE
+Service      : mouhid
+
+Class        : 
+Name         : HID-compliant pen
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\WCOM0008&COL02\4&1AA55F3D&0&0001
+HardwareIds  : HID\VEN_WCOM&DEV_0008&Col02; HID\WCOM0008&Col02; 
+               HID\*WCOM0008&Col02; HID_DEVICE_UP:FF00_U:000A; 
+               HID_DEVICE_UPR:FF00-FFFF; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-compliant system controller
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\INTCFD9&COL03\3&606D35A&0&0002
+HardwareIds  : HID\VEN_INT&DEV_CFD9&Col03; HID\INTCFD9&Col03; 
+               HID\*INTCFD9&Col03; HID_DEVICE_SYSTEM_CONTROL; 
+               HID_DEVICE_UP:0001_U:0080; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-compliant touch screen
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\ATML1000&COL01\4&20690797&0&0000
+HardwareIds  : HID\VEN_ATML&DEV_1000&Col01; HID\ATML1000&Col01; 
+               HID\*ATML1000&Col01; HID_DEVICE_UP:000D_U:0004; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-compliant vendor-defined device
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\WCOM0008&COL03\4&1AA55F3D&0&0002
+HardwareIds  : HID\VEN_WCOM&DEV_0008&Col03; HID\WCOM0008&Col03; 
+               HID\*WCOM0008&Col03; HID_DEVICE_UP:000D_U:0002; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-compliant vendor-defined device
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\ATML1000&COL02\4&20690797&0&0001
+HardwareIds  : HID\VEN_ATML&DEV_1000&Col02; HID\ATML1000&Col02; 
+               HID\*ATML1000&Col02; HID_DEVICE_UP:FF00_U:0001; 
+               HID_DEVICE_UPR:FF00-FFFF; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-compliant vendor-defined device
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\WCOM0008&COL04\4&1AA55F3D&0&0003
+HardwareIds  : HID\VEN_WCOM&DEV_0008&Col04; HID\WCOM0008&Col04; 
+               HID\*WCOM0008&Col04; HID_DEVICE_UP:000D_U:0001; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : HID-compliant wireless radio controls
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : HID\HIDCLASS\1&2D595CA7&0&0000
+HardwareIds  : HID\lnv0078; HID_DEVICE_UP:0001_U:000C; HID_DEVICE
+Service      : 
+
+Class        : 
+Name         : High precision event timer
+Manufacturer : (Standard system devices)
+Status       : 
+DeviceID     : ACPI\PNP0103\0
+HardwareIds  : ACPI\VEN_PNP&DEV_0103; ACPI\PNP0103; *PNP0103
+Service      : 
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\2
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\1
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\3
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\6
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\7
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\4
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F41\5
+HardwareIds  : ACPI\VEN_8086&DEV_0F41&REV_0006; ACPI\VEN_8086&DEV_0F41; 
+               ACPI\80860F41; *80860F41
+Service      : iaioi2c
+
+Class        : 
+Name         : I2C HID Device
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\ATML1000\3&233A31A5&0
+HardwareIds  : ACPI\VEN_ATML&DEV_1000; ACPI\ATML1000; *ATML1000
+Service      : hidi2c
+
+Class        : 
+Name         : I2C HID Device
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\INV6500\1
+HardwareIds  : ACPI\VEN_INV&DEV_6500; ACPI\INV6500; *INV6500
+Service      : hidi2c
+
+Class        : 
+Name         : Intel SD Host Controller
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\80860F14\1
+HardwareIds  : ACPI\VEN_8086&DEV_0F14; ACPI\80860F14; *80860F14
+Service      : sdbus
+
+Class        : 
+Name         : Intel SD Host Controller
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\INT33BB\2
+HardwareIds  : ACPI\VEN_INT&DEV_33BB&REV_0002; ACPI\VEN_INT&DEV_33BB; 
+               ACPI\INT33BB; *INT33BB
+Service      : sdbus
+
+Class        : 
+Name         : Intel SD Host Controller
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\80860F14\3
+HardwareIds  : ACPI\VEN_8086&DEV_0F14; ACPI\80860F14; *80860F14
+Service      : sdbus
+
+Class        : 
+Name         : Intel SST Audio Device (WDM)
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F28\1
+HardwareIds  : ACPI\VEN_8086&DEV_0F28&SUBSYS_221B17AA; ACPI\80860F28; *80860F28
+Service      : IntelSST
+
+Class        : 
+Name         : Intel(R) 82802 Firmware Hub Device
+Manufacturer : Intel
+Status       : 
+DeviceID     : ACPI\INT0800\4&916FF8C&0
+HardwareIds  : ACPI\VEN_INT&DEV_0800; ACPI\INT0800; *INT0800
+Service      : 
+
+Class        : 
+Name         : Intel(R) Atom(TM) CPU  Z3795  @ 1.60GHz
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\GENUINEINTEL_-_INTEL64_FAMILY_6_MODEL_55_-_________INTEL(R)
+               _ATOM(TM)_CPU__Z3795__@_1.60GHZ\_3
+HardwareIds  : ACPI\GenuineIntel_-_Intel64_Family_6_Model_55; 
+               *GenuineIntel_-_Intel64_Family_6_Model_55; 
+               ACPI\GenuineIntel_-_Intel64_Family_6; 
+               *GenuineIntel_-_Intel64_Family_6; ACPI\GenuineIntel_-_Intel64; 
+               *GenuineIntel_-_Intel64
+Service      : intelppm
+
+Class        : 
+Name         : Intel(R) Atom(TM) CPU  Z3795  @ 1.60GHz
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\GENUINEINTEL_-_INTEL64_FAMILY_6_MODEL_55_-_________INTEL(R)
+               _ATOM(TM)_CPU__Z3795__@_1.60GHZ\_1
+HardwareIds  : ACPI\GenuineIntel_-_Intel64_Family_6_Model_55; 
+               *GenuineIntel_-_Intel64_Family_6_Model_55; 
+               ACPI\GenuineIntel_-_Intel64_Family_6; 
+               *GenuineIntel_-_Intel64_Family_6; ACPI\GenuineIntel_-_Intel64; 
+               *GenuineIntel_-_Intel64
+Service      : intelppm
+
+Class        : 
+Name         : Intel(R) Atom(TM) CPU  Z3795  @ 1.60GHz
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\GENUINEINTEL_-_INTEL64_FAMILY_6_MODEL_55_-_________INTEL(R)
+               _ATOM(TM)_CPU__Z3795__@_1.60GHZ\_4
+HardwareIds  : ACPI\GenuineIntel_-_Intel64_Family_6_Model_55; 
+               *GenuineIntel_-_Intel64_Family_6_Model_55; 
+               ACPI\GenuineIntel_-_Intel64_Family_6; 
+               *GenuineIntel_-_Intel64_Family_6; ACPI\GenuineIntel_-_Intel64; 
+               *GenuineIntel_-_Intel64
+Service      : intelppm
+
+Class        : 
+Name         : Intel(R) Atom(TM) CPU  Z3795  @ 1.60GHz
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\GENUINEINTEL_-_INTEL64_FAMILY_6_MODEL_55_-_________INTEL(R)
+               _ATOM(TM)_CPU__Z3795__@_1.60GHZ\_2
+HardwareIds  : ACPI\GenuineIntel_-_Intel64_Family_6_Model_55; 
+               *GenuineIntel_-_Intel64_Family_6_Model_55; 
+               ACPI\GenuineIntel_-_Intel64_Family_6; 
+               *GenuineIntel_-_Intel64_Family_6; ACPI\GenuineIntel_-_Intel64; 
+               *GenuineIntel_-_Intel64
+Service      : intelppm
+
+Class        : 
+Name         : Intel(R) Dynamic Platform & Thermal Framework Display 
+               Participant Driver
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\INT3406\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_INT&DEV_3406; ACPI\INT3406; *INT3406
+Service      : DptfDevDisplay
+
+Class        : 
+Name         : Intel(R) Dynamic Platform & Thermal Framework Driver
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\INT3400\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_INT&DEV_3400; ACPI\INT3400; *INT3400
+Service      : DptfManager
+
+Class        : 
+Name         : Intel(R) Dynamic Platform & Thermal Framework Generic 
+               Participant Driver
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\INT3403\2
+HardwareIds  : ACPI\VEN_INT&DEV_3403; ACPI\INT3403; *INT3403
+Service      : DptfDevGen
+
+Class        : 
+Name         : Intel(R) Dynamic Platform & Thermal Framework Generic 
+               Participant Driver
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\INT3403\1
+HardwareIds  : ACPI\VEN_INT&DEV_3403; ACPI\INT3403; *INT3403
+Service      : DptfDevGen
+
+Class        : 
+Name         : Intel(R) Dynamic Platform & Thermal Framework Processor 
+               Participant Driver
+Manufacturer : Intel
+Status       : OK
+DeviceID     : ACPI\INT3401\0
+HardwareIds  : ACPI\VEN_INT&DEV_3401; ACPI\INT3401; *INT3401
+Service      : DptfDevProc
+
+Class        : 
+Name         : Intel(R) HD Graphics
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : PCI\VEN_8086&DEV_0F31&SUBSYS_221B17AA&REV_0D\3&11583659&0&10
+HardwareIds  : PCI\VEN_8086&DEV_0F31&SUBSYS_221B17AA&REV_0D; 
+               PCI\VEN_8086&DEV_0F31&SUBSYS_221B17AA; 
+               PCI\VEN_8086&DEV_0F31&CC_030000; PCI\VEN_8086&DEV_0F31&CC_0300
+Service      : igfx
+
+Class        : 
+Name         : Intel(R) Imaging Signal Processor 2400
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : DISPLAY\INT0F38\4&37F55D4&0&UID134968
+HardwareIds  : VIDEO\VEN_8086&DEV_0F31&SUBSYS_221B17AA&REV_0D&INT0F38; 
+               VIDEO\VEN_8086&DEV_0F31&SUBSYS_221B17AA&INT0F38; 
+               VIDEO\VEN_8086&DEV_0F31&INT0F38; VIDEO\INT0F38
+Service      : camera
+
+Class        : 
+Name         : Intel(R) Power Engine Plug-in
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT3396\1
+HardwareIds  : ACPI\VEN_INT&DEV_3396; ACPI\INT3396; *INT3396
+Service      : intelpep
+
+Class        : 
+Name         : Intel(R) Power Management IC Device
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT33FD\1
+HardwareIds  : ACPI\VEN_INT&DEV_33FD&REV_0002; ACPI\VEN_INT&DEV_33FD; 
+               ACPI\INT33FD; *INT33FD
+Service      : PMIC
+
+Class        : 
+Name         : Intel(R) Serial IO DMA Controller
+Manufacturer : Microsoft
+Status       : 
+DeviceID     : ACPI\INTL9C60\2
+HardwareIds  : ACPI\VEN_INTL&DEV_9C60; ACPI\INTL9C60; *INTL9C60
+Service      : 
+
+Class        : 
+Name         : Intel(R) Serial IO DMA Controller
+Manufacturer : Microsoft
+Status       : 
+DeviceID     : ACPI\INTL9C60\1
+HardwareIds  : ACPI\VEN_INTL&DEV_9C60; ACPI\INTL9C60; *INTL9C60
+Service      : 
+
+Class        : 
+Name         : Intel(R) Sideband Fabric Device
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\INT33BD\1
+HardwareIds  : ACPI\VEN_INT&DEV_33BD&REV_0002; ACPI\VEN_INT&DEV_33BD; 
+               ACPI\INT33BD; *INT33BD
+Service      : MBI
+
+Class        : 
+Name         : Intel(R) Trusted Execution Engine Interface 
+Manufacturer : Intel
+Status       : OK
+DeviceID     : PCI\VEN_8086&DEV_0F18&SUBSYS_72708086&REV_0D\3&11583659&0&D0
+HardwareIds  : PCI\VEN_8086&DEV_0F18&SUBSYS_72708086&REV_0D; 
+               PCI\VEN_8086&DEV_0F18&SUBSYS_72708086; 
+               PCI\VEN_8086&DEV_0F18&CC_108000; PCI\VEN_8086&DEV_0F18&CC_1080
+Service      : TXEIx64
+
+Class        : 
+Name         : Intel(R) USB 3.0 eXtensible Host Controller - 0100 (Microsoft)
+Manufacturer : Generic USB xHCI Host Controller
+Status       : OK
+DeviceID     : PCI\VEN_8086&DEV_0F35&SUBSYS_72708086&REV_0D\3&11583659&0&A0
+HardwareIds  : PCI\VEN_8086&DEV_0F35&SUBSYS_72708086&REV_0D; 
+               PCI\VEN_8086&DEV_0F35&SUBSYS_72708086; 
+               PCI\VEN_8086&DEV_0F35&CC_0C0330; PCI\VEN_8086&DEV_0F35&CC_0C03
+Service      : USBXHCI
+
+Class        : 
+Name         : IWD Bus Enumerator
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ROOT\SYSTEM\0001
+HardwareIds  : root\iwdbus
+Service      : iwdbus
+
+Class        : 
+Name         : Lenovo HID Mini-driver for Hardware Radio Switch
+Manufacturer : Lenovo
+Status       : OK
+DeviceID     : ROOT\HIDCLASS\0000
+HardwareIds  : root\lnv0078
+Service      : LnvHIDHW
+
+Class        : 
+Name         : Lenovo PM Device
+Manufacturer : Lenovo
+Status       : OK
+DeviceID     : ACPI\LEN0168\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_LEN&DEV_0168; ACPI\LEN0168; *LEN0168
+Service      : IBMPMDRV
+
+Class        : 
+Name         : Lenovo Primary iM Controller
+Manufacturer : Lenovo Corporation
+Status       : OK
+DeviceID     : ROOT\SYSTEM\0002
+HardwareIds  : Root\LPIMController
+Service      : WUDFRd
+
+Class        : 
+Name         : Lenovo Settings
+Manufacturer : Lenovo Corporation
+Status       : OK
+DeviceID     : ROOT\SYSTEM\0003
+HardwareIds  : {48126E0D-4BDD-4D26-8A24-569C7AB522D6}\SettingsDriver
+Service      : WUDFRd
+
+Class        : 
+Name         : Lenovo Settings Camera Audio
+Manufacturer : Lenovo Corporation
+Status       : OK
+DeviceID     : ROOT\SYSTEM\0005
+HardwareIds  : {321C548F-67B9-46FA-AF52-EE3F3F8EFC71}
+Service      : WUDFRd
+
+Class        : 
+Name         : Lenovo Settings Power
+Manufacturer : Lenovo Corporation
+Status       : OK
+DeviceID     : ROOT\SYSTEM\0004
+HardwareIds  : {891CA7EB-D4E5-4C6A-A28F-938FAA543870}\PMVUDDRV
+Service      : WUDFRd
+
+Class        : 
+Name         : Lightweight Sensors Root Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\LWSENSORS\{AB3BECED-B98C-426B-ADBE-309F89C1CD2E}
+HardwareIds  : 
+Service      : 
+
+Class        : 
+Name         : Microphone (Intel SST Audio Device (WDM))
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\MMDEVAPI\{0.0.1.00000000}.{CD3F66C0-27C5-4F1B-ABB7-893935386
+               102}
+HardwareIds  : MMDEVAPI\AudioEndpoints
+Service      : 
+
+Class        : 
+Name         : Microsoft AC Adapter
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\ACPI0003\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_ACPI&DEV_0003; ACPI\ACPI0003; *ACPI0003
+Service      : CmBatt
+
+Class        : 
+Name         : Microsoft ACPI-Compliant Control Method Battery
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\PNP0C0A\1
+HardwareIds  : ACPI\VEN_PNP&DEV_0C0A; ACPI\PNP0C0A; *PNP0C0A
+Service      : CmBatt
+
+Class        : 
+Name         : Microsoft ACPI-Compliant System
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI_HAL\PNP0C08\0
+HardwareIds  : ACPI_HAL\PNP0C08; *PNP0C08
+Service      : ACPI
+
+Class        : 
+Name         : Microsoft Basic Display Driver
+Manufacturer : (Standard display types)
+Status       : OK
+DeviceID     : ROOT\BASICDISPLAY\0000
+HardwareIds  : ROOT\BasicDisplay
+Service      : BasicDisplay
+
+Class        : 
+Name         : Microsoft Basic Render Driver
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\BASICRENDER\0000
+HardwareIds  : ROOT\BasicRender
+Service      : BasicRender
+
+Class        : 
+Name         : Microsoft Bluetooth Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : BTH\MS_BTHBRB\5&37785D40&0&1
+HardwareIds  : BTH\MS_BTHBRB
+Service      : BthEnum
+
+Class        : 
+Name         : Microsoft Bluetooth LE Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : BTH\MS_BTHLE\5&37785D40&0&0
+HardwareIds  : BTH\MS_BTHLE
+Service      : BthLEEnum
+
+Class        : 
+Name         : Microsoft Device Association Root Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\MSDAS\{CE958E9A-424F-4C88-86F4-11314821E75A}
+HardwareIds  : 
+Service      : 
+
+Class        : 
+Name         : Microsoft Hosted Network Virtual Adapter
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : {5D624F94-8850-40C3-A3FA-A4FD2080BAF3}\VWIFIMP_SAP\4&36F4CF7&0&0
+               3
+HardwareIds  : {5d624f94-8850-40c3-a3fa-a4fd2080baf3}\vwifimp_sap
+Service      : vwifimp
+
+Class        : 
+Name         : Microsoft IPv4 IPv6 Transition Adapter Bus
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\IP_TUNNEL_VBUS\IP_TUNNEL_DEVICE_ROOT
+HardwareIds  : (null)
+Service      : 
+
+Class        : 
+Name         : Microsoft ISATAP Adapter
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\IP_TUNNEL_VBUS\ISATAP_0
+HardwareIds  : *ISATAP
+Service      : tunnel
+
+Class        : 
+Name         : Microsoft Kernel Debug Network Adapter
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\KDNIC\0000
+HardwareIds  : root\kdnic
+Service      : kdnic
+
+Class        : 
+Name         : Microsoft Storage Spaces Controller
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\SPACEPORT\0000
+HardwareIds  : Root\Spaceport
+Service      : spaceport
+
+Class        : 
+Name         : Microsoft System Management BIOS Driver
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ROOT\MSSMBIOS\0000
+HardwareIds  : ROOT\mssmbios
+Service      : mssmbios
+
+Class        : 
+Name         : Microsoft UEFI-Compliant System
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI_HAL\UEFI\0
+HardwareIds  : ACPI_HAL\UEFI
+Service      : UEFI
+
+Class        : 
+Name         : Microsoft Virtual Drive Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\VDRVROOT\0000
+HardwareIds  : ROOT\vdrvroot
+Service      : vdrvroot
+
+Class        : 
+Name         : Microsoft Wi-Fi Direct Virtual Adapter
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : {5D624F94-8850-40C3-A3FA-A4FD2080BAF3}\VWIFIMP_WFD\4&36F4CF7&0&0
+               2
+HardwareIds  : {5d624f94-8850-40c3-a3fa-a4fd2080baf3}\vwifimp_wfd
+Service      : vwifimp
+
+Class        : 
+Name         : Microsoft Windows Management Interface for ACPI
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\PNP0C14\0
+HardwareIds  : ACPI\VEN_PNP&DEV_0C14; ACPI\PNP0C14; *PNP0C14
+Service      : WmiAcpi
+
+Class        : 
+Name         : Microsoft Windows Management Interface for ACPI
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\PNP0C14\1
+HardwareIds  : ACPI\VEN_PNP&DEV_0C14; ACPI\PNP0C14; *PNP0C14
+Service      : WmiAcpi
+
+Class        : 
+Name         : Microsoft Windows Management Interface for ACPI
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ACPI\PNP0C14\3
+HardwareIds  : ACPI\VEN_PNP&DEV_0C14; ACPI\PNP0C14; *PNP0C14
+Service      : WmiAcpi
+
+Class        : 
+Name         : Microsoft XPS Document Writer
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\PRINTENUM\{D943D8D8-F7EB-4400-8EEE-A8CFF8C894B5}
+HardwareIds  : PRINTENUM\{0f4130dd-19c7-7ab6-99a1-980f03b2ee4e}; 
+               PRINTENUM\LocalPrintQueue; 
+               {0f4130dd-19c7-7ab6-99a1-980f03b2ee4e}
+Service      : 
+
+Class        : 
+Name         : Motherboard resources
+Manufacturer : (Standard system devices)
+Status       : 
+DeviceID     : ACPI\PNP0C02\1
+HardwareIds  : ACPI\VEN_PNP&DEV_0C02; ACPI\PNP0C02; *PNP0C02
+Service      : 
+
+Class        : 
+Name         : Motherboard resources
+Manufacturer : (Standard system devices)
+Status       : 
+DeviceID     : ACPI\PNP0C02\2
+HardwareIds  : ACPI\VEN_PNP&DEV_0C02; ACPI\PNP0C02; *PNP0C02
+Service      : 
+
+Class        : 
+Name         : NDIS Virtual Network Adapter Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\NDISVIRTUALBUS\0000
+HardwareIds  : ROOT\NdisVirtualBus
+Service      : NdisVirtualBus
+
+Class        : 
+Name         : NFC I2C Device
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\BCM2F1F\1
+HardwareIds  : ACPI\VEN_BCM&DEV_2F1F; ACPI\BCM2F1F; *BCM2F1F
+Service      : BcmNfcIc
+
+Class        : 
+Name         : NFC Proximity Provider
+Manufacturer : Broadcom Internal (Proximity)
+Status       : OK
+DeviceID     : BCMNFCIC\NFC_PROVIDER\4&2AD37B4A&0&257
+HardwareIds  : BCMNFCIC\NFC_PROVIDER
+Service      : WUDFRd
+
+Class        : 
+Name         : Nitro PDF Creator (Pro 9)
+Manufacturer : 
+Status       : OK
+DeviceID     : SWD\PRINTENUM\{EBD4F6E7-7C09-4EC7-861C-0F26A62940DD}
+HardwareIds  : PRINTENUM\LocalPrintQueue
+Service      : 
+
+Class        : 
+Name         : PCI Express Root Complex
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\PNP0A08\0
+HardwareIds  : ACPI\VEN_PNP&DEV_0A08; ACPI\PNP0A08; *PNP0A08
+Service      : pci
+
+Class        : 
+Name         : PCI standard host CPU bridge
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : PCI\VEN_8086&DEV_0F00&SUBSYS_221B17AA&REV_0D\3&11583659&0&00
+HardwareIds  : PCI\VEN_8086&DEV_0F00&SUBSYS_221B17AA&REV_0D; 
+               PCI\VEN_8086&DEV_0F00&SUBSYS_221B17AA; 
+               PCI\VEN_8086&DEV_0F00&CC_060000; PCI\VEN_8086&DEV_0F00&CC_0600
+Service      : 
+
+Class        : 
+Name         : PCI standard ISA bridge
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : PCI\VEN_8086&DEV_0F1C&SUBSYS_72708086&REV_0D\3&11583659&0&F8
+HardwareIds  : PCI\VEN_8086&DEV_0F1C&SUBSYS_72708086&REV_0D; 
+               PCI\VEN_8086&DEV_0F1C&SUBSYS_72708086; 
+               PCI\VEN_8086&DEV_0F1C&CC_060100; PCI\VEN_8086&DEV_0F1C&CC_0601
+Service      : msisadrv
+
+Class        : 
+Name         : Plug and Play Software Device Enumerator
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ROOT\SYSTEM\0000
+HardwareIds  : ROOT\SWENUM
+Service      : swenum
+
+Class        : 
+Name         : Programmable interrupt controller
+Manufacturer : (Standard system devices)
+Status       : 
+DeviceID     : ACPI\PNP0000\4&916FF8C&0
+HardwareIds  : ACPI\VEN_PNP&DEV_0000; ACPI\PNP0000; *PNP0000
+Service      : 
+
+Class        : 
+Name         : Realtek I2S Audio Codec
+Manufacturer : Realtek Semiconductor Corp.
+Status       : OK
+DeviceID     : ACPI\10EC5640\1
+HardwareIds  : ACPI\VEN_10EC&DEV_5640&SUBSYS_221B17AA; ACPI\10EC5640; *10EC5640
+Service      : rtii2sac64
+
+Class        : 
+Name         : Remote Desktop Device Redirector Bus
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\RDPBUS\0000
+HardwareIds  : ROOT\RDPBUS
+Service      : rdpbus
+
+Class        : 
+Name         : Root Print Queue
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\PRINTENUM\PRINTQUEUES
+HardwareIds  : PRINTENUM\LocalPrintQueue
+Service      : 
+
+Class        : 
+Name         : SanDisk SEM64G 
+Manufacturer : (Standard disk drives)
+Status       : OK
+DeviceID     : SD\DISK&SANDISK&SEM64G&1.2\4&2702BCC&0&0036C281
+HardwareIds  : SD\GenDisk; GenDisk
+Service      : disk
+
+Class        : 
+Name         : SD Storage Class Controller
+Manufacturer : Generic
+Status       : OK
+DeviceID     : SD\VID_03&OID_5344&PID_SE64G&REV_8.0\3&2017C2D0&0&0
+HardwareIds  : SD\VID_03&OID_5344&PID_SE64G&REV_8.0; 
+               SD\VID_03&OID_5344&PID_SE64G
+Service      : sdstor
+
+Class        : 
+Name         : SD Storage Class Controller
+Manufacturer : Generic
+Status       : OK
+DeviceID     : SD\VID_45&OID_0000&PID_SEM64G&REV_1.2\3&7A47DD1&0&0
+HardwareIds  : SD\VID_45&OID_0000&PID_SEM64G&REV_1.2; 
+               SD\VID_45&OID_0000&PID_SEM64G
+Service      : sdstor
+
+Class        : 
+Name         : Sideband GPIO Buttons Injection Device
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : {30EBFBF8-DF5F-4D4D-9FC5-A26C7FD1DF4A}\GPIO_BUTTONS\3&606D35A&0&
+               0
+HardwareIds  : {30ebfbf8-df5f-4d4d-9fc5-a26c7fd1df4a}\GPIO_Buttons
+Service      : 
+
+Class        : 
+Name         : Sierra Wireless EM7345 4G LTE
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : USB\VID_1199&PID_A001&MI_00\6&2DB53B76&0&0000
+HardwareIds  : USB\VID_1199&PID_A001&REV_1729&MI_00; 
+               USB\VID_1199&PID_A001&MI_00
+Service      : wmbclass
+
+Class        : 
+Name         : Simple Device Orientation Sensor
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\SENSORSANDLOCATIONENUM\SENSORSSERVICESENSORSWDEVICE
+HardwareIds  : Sensors\SensorsServiceDriver
+Service      : SensorsServiceDriver
+
+Class        : 
+Name         : Speakers (Intel SST Audio Device (WDM))
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : SWD\MMDEVAPI\{0.0.0.00000000}.{1FFBFB16-7556-405C-BFBE-C4B7F1176
+               DA7}
+HardwareIds  : MMDEVAPI\AudioEndpoints
+Service      : 
+
+Class        : 
+Name         : SPI Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F0E\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_8086&DEV_0F0E&REV_0006; ACPI\VEN_8086&DEV_0F0E; 
+               ACPI\80860F0E; *80860F0E
+Service      : iaiospi
+
+Class        : 
+Name         : Synaptics FP Sensors (WBF) VFS6101
+Manufacturer : Synaptics FP Sensors
+Status       : OK
+DeviceID     : ACPI\VFSI6101\1
+HardwareIds  : ACPI\VEN_VFSI&DEV_6101; ACPI\VFSI6101; *VFSI6101
+Service      : WUDFRd
+
+Class        : 
+Name         : System CMOS/real time clock
+Manufacturer : (Standard system devices)
+Status       : OK
+DeviceID     : ACPI\PNP0B00\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_PNP&DEV_0B00; ACPI\PNP0B00; *PNP0B00
+Service      : 
+
+Class        : 
+Name         : System Firmware
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : UEFI\RES_{3B6686BD-0D76-4030-B70E-B5519E2FC5A0}\0
+HardwareIds  : UEFI\RES_{3b6686bd-0d76-4030-b70e-b5519e2fc5a0}&REV_F162D8; 
+               UEFI\RES_{3b6686bd-0d76-4030-b70e-b5519e2fc5a0}
+Service      : 
+
+Class        : 
+Name         : System timer
+Manufacturer : (Standard system devices)
+Status       : 
+DeviceID     : ACPI\PNP0100\4&916FF8C&0
+HardwareIds  : ACPI\VEN_PNP&DEV_0100; ACPI\PNP0100; *PNP0100
+Service      : 
+
+Class        : 
+Name         : Trusted Platform Module 2.0
+Manufacturer : (Standard)
+Status       : OK
+DeviceID     : ACPI\MSFT0101\2&DABA3FF&3
+HardwareIds  : ACPI\VEN_MSFT&DEV_0101; ACPI\MSFT0101; *MSFT0101
+Service      : TPM
+
+Class        : 
+Name         : UART Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F0A\1
+HardwareIds  : ACPI\VEN_8086&DEV_0F0A&REV_0006; ACPI\VEN_8086&DEV_0F0A; 
+               ACPI\80860F0A; *80860F0A
+Service      : iaiouart
+
+Class        : 
+Name         : UART Controller
+Manufacturer : Intel Corporation
+Status       : OK
+DeviceID     : ACPI\80860F0A\2
+HardwareIds  : ACPI\VEN_8086&DEV_0F0A&REV_0006; ACPI\VEN_8086&DEV_0F0A; 
+               ACPI\80860F0A; *80860F0A
+Service      : iaiouart
+
+Class        : 
+Name         : UMBus Root Bus Enumerator
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\UMBUS\0000
+HardwareIds  : root\umbus
+Service      : umbus
+
+Class        : 
+Name         : USB Composite Device
+Manufacturer : (Standard USB Host Controller)
+Status       : OK
+DeviceID     : USB\VID_1199&PID_A001\013937004582746
+HardwareIds  : USB\VID_1199&PID_A001&REV_1729; USB\VID_1199&PID_A001
+Service      : usbccgp
+
+Class        : 
+Name         : USB Root Hub (xHCI)
+Manufacturer : (Standard USB HUBs)
+Status       : OK
+DeviceID     : USB\ROOT_HUB30\4&3B2E1E16&0&0
+HardwareIds  : USB\ROOT_HUB30&VID8086&PID0F35&REV000D; 
+               USB\ROOT_HUB30&VID8086&PID0F35; USB\ROOT_HUB30
+Service      : USBHUB3
+
+Class        : 
+Name         : Volume Manager
+Manufacturer : Microsoft
+Status       : OK
+DeviceID     : ROOT\VOLMGR\0000
+HardwareIds  : ROOT\VOLMGR
+Service      : volmgr
+
+Class        : 
+Name         : Wacom Device
+Manufacturer : Wacom
+Status       : OK
+DeviceID     : ACPI\WCOM0008\1
+HardwareIds  : ACPI\VEN_WCOM&DEV_0008; ACPI\WCOM0008; *WCOM0008
+Service      : WacHidRouter
+
+Class        : 
+Name         : Wide viewing angle & High density FlexView Display 1920x1200
+Manufacturer : Lenovo
+Status       : OK
+DeviceID     : DISPLAY\LEN4100\4&37F55D4&0&UID68092928
+HardwareIds  : MONITOR\LEN4100
+Service      : monitor
+
+
+

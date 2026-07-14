@@ -8,7 +8,101 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T7 (2026-07-14) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T8 (2026-07-14) — END STATE (resume here)
+
+**Executed T6/T7's queued `sgdisk` partition-write step: hand-placed all 11 ChromeOS
+partitions (GPT indices 5–15) into the ~14.74 GB eMMC gap designed in
+`PARTITION-DESIGN.md`, entirely from inside the booted `Rescue Recovery` image (channel
+#2). Windows partitions 1–4 confirmed byte-identical before/after. Channel #1 never
+touched or involved.**
+
+### Live data pulled first, before drafting the write plan
+Booted the tablet into `Rescue Recovery` via the physical Boot Menu (zero involvement of
+channel #1), joined WiFi, SSH'd in as `root` (dropbear password-auth). Confirmed:
+`/dev/mmcblk2` is the eMMC (has `boot0`/`boot1`/`rpmb` — `/dev/mmcblk1` is the SD card,
+unrelated), 512-byte sectors, and a live `sgdisk -p` read showing P1–P4 exactly matching
+T7's documented state (zero drift) and a free gap of sectors 72,099,840–103,012,351
+(14.74 GiB) — byte-exact match to `PARTITION-DESIGN.md`'s assumed offsets, no correction
+needed there.
+
+### 🔴 Caught a real landmine before writing anything: partition-number collision
+`PARTITION-DESIGN.md`'s table used ChromeOS-convention GPT indices 1–11 (1=STATE,
+2/3=KERN-A/ROOT-A, etc.) as if this were a fresh disk. It isn't — indices 1–4 are already
+Windows' ESP/MSR/`C:`/`images`. `sgdisk -n 1:...` would have targeted the *existing*
+entry 1 (the ESP) instead of creating a new one. Caught by hand-tracing the sector math
+before drafting the plan, not by trial and error against the real disk. **Fix: remapped
+the 11 new partitions to GPT indices 5–15**, keeping the same labels/type-GUIDs and the
+same relative KERN/ROOT adjacency pattern (ChromeOS tooling resolves partitions by
+type-GUID + label + vboot attributes, not raw GPT index, so renumbering is safe).
+
+### Plan reviewed and signed off before execution
+Full plan with hand-computed sector math for all 11 partitions, the `-a 1` (sector-exact,
+no alignment padding — matches the real installer's back-to-back stub layout) decision,
+single-atomic-write approach, and a rollback path:
+`/home/neil/.claude/plans/thinkpad10-t8-sgdisk-write.md`. User signed off on the indices
+5–15 fix and the plan as drafted before anything ran.
+
+### ✅ Write executed and verified
+Single atomic `sgdisk -a 1 -n ... -t ... -c ...` invocation (11 partitions, one table
+rewrite) against `/dev/mmcblk2`, with a safety net at every step:
+- **Pre-write**: `sgdisk -p` text snapshot + `sgdisk --backup` binary GPT snapshot taken
+  on-device, then pulled to the local machine immediately (rescue rootfs is tmpfs — lost
+  on reboot). `scp` doesn't work against this dropbear (no `sftp-server` in the busybox
+  image) — worked around with `ssh ... cat file > local` instead.
+- **The write**: completed successfully (kernel partition-table-reread warning is
+  expected/harmless — new table takes effect next reboot/`partprobe`).
+- **Post-write verification**: `diff` of partitions 1–4 between pre/post `sgdisk -p`
+  output → **exit 0, zero output** — Windows' ESP/MSR/`C:`/`images` entries byte-identical
+  before and after. New partitions 5–15 visually confirmed to match the plan's table
+  exactly (KERN-A 16 MiB, ROOT-A 4 GiB, ..., STATE 10.7 GiB remainder).
+- **Gotcha**: `diff <(...)` process substitution isn't supported in busybox `sh` (first
+  attempt errored `exit 2`, not a real content mismatch) — redone with plain temp files
+  for a clean pass/fail signal.
+- Post-write backups also pulled locally. Recorded ROOT-A's assigned PARTUUID
+  (`F2E33B09-C91E-4469-A3BB-6661E0367944`) for the future GRUB `root=PARTUUID=...` boot
+  config (Iconia-pattern boot, per the design doc — not configured yet, just captured).
+- All four backup/snapshot files + the PARTUUID readout are in local scratchpad
+  (`gpt-backups/`) — **not committed to git** (binary GPT blobs, matches the repo's
+  existing gitignore convention of never committing build/binary artifacts). Available
+  locally if a restore is ever needed (`sgdisk --load-backup=` or the simpler
+  `sgdisk -d 5 -d 6 ... -d 15` since 1–4 were never touched).
+
+### Channel #1 status
+Not used at all this session except the standard start-of-session
+`scripts/thinkpad-ssh.sh` re-orient check (passed, `Lenovo-PC` reachable, sshd
+RUNNING/AUTO_START) before booting into the rescue image. Untouched throughout the
+rescue-image work since; expected to be unaffected next Windows boot (its own 4
+partitions untouched, new partitions in the gap are simply invisible to Windows).
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Boot Windows normally once and confirm it comes up clean (sanity check that adding
+   partitions 5–15 to the live GPT didn't perturb anything Windows-side) — not yet done
+   this session, the tablet was left in the rescue image at session close (see below).
+2. Filesystem creation: `mkfs.ext4` (or whichever FS ChromeOS/FydeOS STATE/ROOT-A expect
+   — confirm against the SD card reference image) on STATE (15) and populate ROOT-A (6)
+   with the actual FydeOS rootfs payload. This is PROGRESS.md's long-standing "step 2" /
+   deferred item #3 from T6, now unblocked since partitions exist for real.
+3. Design and stage the GRUB boot config change (Iconia-pattern `root=PARTUUID=` using
+   ROOT-A's recorded PARTUUID `F2E33B09-C91E-4469-A3BB-6661E0367944`) — per
+   `PARTITION-DESIGN.md`'s "Chosen approach" (boot off existing ESP, no new EFI-SYSTEM
+   partition). This is a boot-order-adjacent change to the ESP GRUB owns — needs its own
+   plan + sign-off per the standing rule, same as this session's write did.
+
+**State at session close:** repo committed through this entry (plan file itself stays at
+`~/.claude/plans/thinkpad10-t8-sgdisk-write.md`, per existing convention — not copied
+into the repo). eMMC (Disk 0): P1–P4 unchanged (byte-verified), **11 new partitions
+(GPT 5–15) now live** in the former 14.74 GB gap per the table above — kernel hasn't
+re-read the table yet (takes effect next reboot/`partprobe`; harmless, no risk). No
+filesystems created yet, no data written into any of the new partitions — GPT entries
+only. Tablet was left booted in the rescue image (channel #2) at session close, not yet
+rebooted back to Windows to confirm a clean boot with the new table — flagged as the
+first thing to check next session. Channel #1 was healthy at session start; not
+re-verified after since the rescue image was used exclusively from that point on.
+
+---
+
+## ThinkPad 10 20C1 — Session T7 (2026-07-14) — END STATE (superseded by T8 above)
 
 **Re-staged T6's `sgdisk`-bundled rescue image onto the tablet and boot-tested it on
 real hardware — PASSED. Promoted it to the live `Rescue Recovery` slot. No `sgdisk`

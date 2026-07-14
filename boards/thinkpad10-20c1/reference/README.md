@@ -13,6 +13,12 @@ directory holds the underlying raw data.
 - `windows-system-info.txt` — BIOS version (`GWET27WW (1.27)`, released 2015-01-12),
   board (`20C10026UK`, version `SKH47 I`), OEM string confirms `Intel BayTrail CRB
   Platform`.
+- `windows-pnp-device-inventory-hdmi-connected.txt` — same dump repeated with an
+  external display plugged into the micro-HDMI port (initial scan had nothing
+  connected, so the HDMI video/audio devices were invisible — not because the port
+  doesn't exist). Diff against the base inventory shows exactly two new devices:
+  `Generic PnP Monitor` (video) and `LG TV SSCR2 (Intel SST Audio Device (WDM))`
+  (HDMI audio endpoint) — confirms the port works, both video and audio.
 - `firmware/` — vendor firmware/calibration blobs pulled from
   `C:\Windows\System32\DriverStore\FileRepository\...` and byte-verified against each
   source file's `Get-Item`-reported length after transfer (see gotcha below):

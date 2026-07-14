@@ -76,10 +76,10 @@ design pass, not a quick follow-on to this session's shrink.
    per the (still-draft) Phase-2 plan in T4's section below. `Rescue Recovery` remains the
    fallback throughout.
 
-**State at session close:** repo not yet committed (this session's `PROGRESS.md` edit is
-pending). Firmware/boot config unchanged from T4's close (pristine layout + persistent
-`Rescue Recovery` entry, Windows default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB,
-new ~14.74 GB unallocated gap before P4, P4 unchanged. Channel #1 confirmed healthy.
+**State at session close:** repo committed and pushed (`4287706`). Firmware/boot config
+unchanged from T4's close (pristine layout + persistent `Rescue Recovery` entry, Windows
+default). Disk 0: P1–P2 unchanged, P3 `C:` now 34.00 GB, new ~14.74 GB unallocated gap
+before P4, P4 unchanged. Channel #1 confirmed healthy at session close.
 
 ---
 

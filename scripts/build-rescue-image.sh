@@ -63,7 +63,10 @@ cmd_config(){
   make x86_64_defconfig
   { echo "# --- $BOARD_ID rescue-minimal.config ---"; cat "$RD/config/rescue-minimal.config"; } >> .config
   # CONFIG_INITRAMFS_SOURCE is a build-path, not a static fragment value - inject it here.
-  echo "CONFIG_INITRAMFS_SOURCE=\"$IMROOT\"" >> .config
+  # Two space-separated sources: the assembled directory tree, plus a cpio-list text
+  # file declaring /dev/console directly (see extra-nodes.list - real mknod isn't usable
+  # in this build sandbox, CAP_MKNOD is unavailable even under sudo).
+  echo "CONFIG_INITRAMFS_SOURCE=\"$IMROOT $RD/extra-nodes.list\"" >> .config
   make olddefconfig
   echo "=== rescue load-bearing config ==="
   grep -E 'CONFIG_(BRCMFMAC|CFG80211|MMC_SDHCI_ACPI|EFI_STUB|BLK_DEV_INITRD|INITRAMFS_SOURCE|DEVTMPFS_MOUNT|FB_EFI|USB_HID)=' .config \
@@ -87,6 +90,17 @@ cmd_initramfs(){
   rm -rf "$IMROOT"
   mkdir -p "$IMROOT"/{bin,sbin,etc,proc,sys,dev,tmp,root,lib,lib64,lib/firmware/brcm,mnt/esp}
 
+  # /dev/console device node: see $RD/extra-nodes.list (a kernel cpio-list source,
+  # merged into CONFIG_INITRAMFS_SOURCE alongside this directory in cmd_config - real
+  # `mknod` isn't usable here, this sandbox lacks CAP_MKNOD even under sudo). Found
+  # necessary after the 4th real-hardware boot test: dmesg showed "Warning: unable to
+  # open an initial console." - the kernel's own console_on_rootfs() couldn't find
+  # /dev/console before exec'ing /init (this initramfs otherwise relies entirely on
+  # CONFIG_DEVTMPFS_MOUNT to populate /dev, which apparently didn't win the race here),
+  # so /init's fd 0/1/2 were plausibly never connected to anything - explaining "kernel
+  # boot log is visible (printk doesn't go through a process's fds) but no shell prompts
+  # and no response to typed input (read on a dead fd 0 returns immediately)".
+
   # busybox-static: single fully-static binary, symlink every applet name to it.
   install -Dm755 /bin/busybox "$IMROOT/bin/busybox"
   ( cd "$IMROOT" && ./bin/busybox --list ) | while read -r applet; do
@@ -99,18 +113,21 @@ cmd_initramfs(){
   copy_with_libs /sbin/wpa_supplicant sbin
   copy_with_libs /sbin/wpa_cli        sbin
 
-  # WiFi firmware: brcmfmac43241b4-sdio.bin from Debian's firmware-brcm80211 (non-free-
-  # firmware component - `apt-get install firmware-brcm80211`). No NVRAM/SROM .txt is
-  # bundled: neither Debian's package nor this device's own Windows Broadcom driver
-  # (oem24.inf references bcm943241ipaagb_p100*.txt, but no such file actually exists in
+  # WiFi firmware: from Debian's firmware-brcm80211 (non-free-firmware component -
+  # `apt-get install firmware-brcm80211`). This device's actual chip identifies itself
+  # as needing revision **b5**, not b4 (confirmed via a real-hardware boot-test dmesg:
+  # "brcmf_fw_alloc_request: using brcm/brcmfmac43241b5-sdio for chip BCM4324/6" - W4-820
+  # uses a different chip revision, b4, which is why the initial guess copied the wrong
+  # one). Ship both b4 and b5 rather than re-guess. No NVRAM/SROM .txt is bundled: neither
+  # Debian's package nor this device's own Windows Broadcom driver (oem24.inf references
+  # bcm943241ipaagb_p100*.txt, but no such file actually exists in
   # C:\Windows\system32\drivers - checked directly over SSH) ships one for this chip
-  # revision, so calibration is apparently embedded in the dongle firmware image itself
-  # for this SKU. Whether brcmfmac needs one anyway is an open question for the first
-  # real-hardware boot test (T4 plan step 4/5) - if WiFi fails to associate, that's the
-  # first thing to revisit.
-  FW=/lib/firmware/brcm/brcmfmac43241b4-sdio.bin
-  [ -f "$FW" ] || { echo "MISSING $FW - apt install firmware-brcm80211 (enable non-free-firmware component first)"; exit 1; }
-  install -Dm644 "$FW" "$IMROOT/lib/firmware/brcm/brcmfmac43241b4-sdio.bin"
+  # revision, so calibration is apparently embedded in the dongle firmware image itself.
+  for rev in b4 b5; do
+    FW="/lib/firmware/brcm/brcmfmac43241${rev}-sdio.bin"
+    [ -f "$FW" ] || { echo "MISSING $FW - apt install firmware-brcm80211 (enable non-free-firmware component first)"; exit 1; }
+    install -Dm644 "$FW" "$IMROOT/lib/firmware/brcm/brcmfmac43241${rev}-sdio.bin"
+  done
 
   # skel/ overlay: init script + /etc templates (tracked in git, see rescue/skel/).
   rsync -a "$RD/skel/" "$IMROOT/"

@@ -95,22 +95,85 @@ and memory `feedback_recovery-tooling-security` for the auth-design principles b
   `S:\EFI\Rescue\` path) rather than deleted. Flagging here so a future session doesn't
   get surprised by it again.
 
+### Rescue image BOOT-TESTED on real hardware — 6 bugs found and fixed, 2/2 boots succeeded
+Full debug trail (kept for future boards hitting the same class of issues — none of this
+was previously documented anywhere in the repo):
+
+1. **Black screen, backlight on, nothing at all.** Root cause: `CONFIG_CMDLINE_BOOL` was
+   unset — Windows Boot Manager loads a raw EFI executable directly (unlike GRUB), so it
+   never supplies a `console=` LoadOptions string. Fix: `CONFIG_CMDLINE_BOOL=y` +
+   `CONFIG_CMDLINE="console=tty0 ..."` + `CONFIG_CMDLINE_OVERRIDE=y`.
+2. **Still black after the cmdline fix.** `x86_64_defconfig`'s baseline already pulls in
+   `CONFIG_DRM_I915=y` (Bay Trail's Gen7 iGPU) — i915 takes over the display from the EFI
+   GOP framebuffer, but `CONFIG_DRM_FBDEV_EMULATION` was off, so there was no fbcon
+   bridge on top of DRM to draw *any* text through, including panic messages. Fix:
+   `CONFIG_DRM_FBDEV_EMULATION=y`.
+3. **Console works (boot text visible), but no interactive prompts, no response to
+   keyboard input.** Two compounding bugs, found via ESP-resident diagnostic logging
+   (`init` writes `S:\EFI\Rescue\boot-debug.log` early, readable over channel #1
+   regardless of what the screen shows — the technique that unstuck this whole debug
+   session):
+   - `/dev/console`, relied on entirely via `CONFIG_DEVTMPFS_MOUNT` auto-population,
+     wasn't ready before the kernel's own `console_on_rootfs()` tried to open it
+     (dmesg: `Warning: unable to open an initial console.`) — PID 1's fd 0/1/2 were
+     plausibly never connected to anything. Fix: bake `/dev/console` in directly via a
+     kernel cpio-list source (`rescue/extra-nodes.list`, merged into
+     `CONFIG_INITRAMFS_SOURCE` alongside the initramfs directory) — real `mknod` isn't
+     usable in the build sandbox (`sudo mknod` fails, no `CAP_MKNOD` even under sudo).
+   - Even after that, `/dev/console`'s INPUT side still isn't reliably interactive (it's
+     historically an output/kernel-message redirector) — confirmed when a `read -t 15`
+     against it never even timed out. Fix: `exec </dev/tty1 >/dev/tty1 2>&1` right after
+     devtmpfs mounts, rebinding the script's own stdio to the real VT device. This is
+     what actually fixed it.
+4. **WiFi firmware wouldn't load** (`Direct firmware load for brcm/brcmfmac43241b4-sdio...
+   failed with error -2`). This device's chip identifies as needing revision **b5**, not
+   b4 — the earlier NVRAM investigation only checked b4 existence, and the b4/b5 mismatch
+   was copied blind from the W4-820 (a different chip revision). Fix: ship both
+   `brcmfmac43241b4-sdio.bin` and `b5`. Confirmed working — `brcmf_c_preinit_dcmds:
+   Firmware: BCM4324/6 ... version 6.25.91.13` in dmesg, **no NVRAM file needed after
+   all** (loads and associates fine without one, just with default/limited channels).
+5. **`udhcpc` reported "lease obtained" but `ip addr show wlan0` had no `inet` line.**
+   busybox's `udhcpc` does not configure the interface itself — it hands the lease to an
+   external script via env vars, and none was provided. Fix: added
+   `rescue/skel/usr/share/udhcpc/default.script` (applies the lease via `ifconfig`/
+   `route`), passed explicitly via `udhcpc -s`.
+6. **Typing `exit` at the final local shell caused a kernel panic instead of a clean
+   return.** The init script ended with `exec /bin/sh`, which replaces PID 1 with the
+   shell — exiting PID 1 is fatal to the kernel by design. Fix: `while true; do /bin/sh;
+   done` instead, so PID 1 (the script) stays alive as a supervisor and `exit` just
+   respawns a fresh shell.
+
+**Proven (2 independent boots, 2026-07-14):** WiFi join (interactive, fresh each time) →
+password set/reused (persisted correctly to `S:\EFI\Rescue\rescue-shadow.txt`, reloaded
+without re-prompting on the 2nd boot) → dropbear password-auth SSH reachable at
+`192.168.1.133` (DHCP, matches the tablet's known WiFi MAC) → confirmed live shell access
+both times.
+
+**Known limitations (not yet solved):**
+- **`reboot`/`poweroff` from inside the rescue image do not reliably return to
+  Windows** — busybox's `reboot` didn't trigger a real hardware reset in this minimal
+  environment (dropbear stayed reachable minutes afterward under the same session). A
+  **hard power-off is the only proven way back** to Windows from the rescue image
+  currently. Physical Boot Menu / power button remains the ultimate fallback either way.
+- **Channel #2 currently requires channel #1 to invoke it** — see `CLAUDE.md`'s updated
+  status line. It only boots via a one-time `{fwbootmgr} bootsequence` entry armed *from
+  Windows*; there's no persistent boot-menu entry yet, so it isn't independently
+  reachable if channel #1 were actually lost. **This is why the hard rule stays in force**
+  despite the functional proof above — closing this gap is next.
+- NVRAM/CLM blob still absent (device runs with default/limited channel support) — works,
+  but not fully calibrated. Low priority given it works at all.
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live (or follow the recovery
    recipe in memory `[[thinkpad10-20c1-boot-blocked]]` if `~/.ssh` is empty again).
-1. **Boot-test the staged rescue image** (needs the user physically at the device for the
-   local WiFi/password console prompts): add a ONE-TIME `{fwbootmgr} bootsequence` entry
-   for `S:\EFI\Rescue\rescuex64.efi` (same pattern as T3's `shellx64.efi` test — Windows
-   stays default), reboot, join WiFi + set the rescue password when prompted, confirm
-   `ssh root@<ip>` (password) reaches it from another machine **while Windows sshd stays
-   up in parallel**. Reboot again to confirm the saved password persists. Delete the temp
-   boot entry afterward. If WiFi doesn't associate, the NVRAM gap above is the first
-   suspect — revisit sourcing calibration data.
-2. Once proven twice, record it PROVEN in `CLAUDE.md` (lifts the hard-rule blocking
-   condition) and here.
-3. **Shrinking C: is still deferred** — only needed to free eMMC space for the ChromeOS
-   region (mandatory-sequence step 4, installing FydeOS), which comes after channel #2 is
-   proven. Revisit after step 2 above.
+1. **Close the independent-fallback gap**: add a *persistent* (non-one-time) boot-menu
+   entry for `S:\EFI\Rescue\rescuex64.efi` (`bcdedit /copy {bootmgr}` without ever
+   touching `bootsequence`/`displayorder`'s Windows-default position) so it's reachable
+   via the firmware Boot Menu (volume buttons) with zero dependency on channel #1. Once
+   that's proven reachable that way, update `CLAUDE.md`'s channel #2 status line to fully
+   PROVEN — that's the line that finally lifts the hard rule's blocking condition.
+2. **Shrinking C: is still deferred** — only needed to free eMMC space for the ChromeOS
+   region (mandatory-sequence step 4, installing FydeOS), which comes after step 1 above.
 
 ---
 

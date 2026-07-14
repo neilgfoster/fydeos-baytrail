@@ -18,6 +18,14 @@ mount -t devtmpfs devtmpfs /dev 2>/dev/null   # CONFIG_DEVTMPFS_MOUNT should do 
 mount -t tmpfs tmpfs /tmp
 ifconfig lo up
 
+# Rebind our own stdio to the real VT device rather than the inherited /dev/console.
+# /dev/console is historically an output/kernel-message-oriented redirector and its
+# INPUT-side (keyboard) semantics aren't reliably interactive - confirmed on the 5th
+# real-hardware attempt: a `read -t 15` against inherited fd 0 (-> /dev/console) never
+# even timed out, meaning select/poll on it doesn't behave normally for reads. /dev/tty1
+# is the actual VT device with normal interactive tty semantics.
+exec </dev/tty1 >/dev/tty1 2>&1
+
 echo "=== ThinkPad 10 20C1 rescue environment ==="
 echo "kernel: $(uname -r)"
 
@@ -46,6 +54,31 @@ else
   echo "WARNING: could not find/mount the ESP - password persistence unavailable this boot"
 fi
 SHADOW_FILE=/mnt/esp/EFI/Rescue/rescue-shadow.txt
+
+# --- early diagnostics -> ESP log file (works even if the console/keyboard don't -
+# read this back over the Windows SSH channel after power-cycling, regardless of what
+# happened on screen). Added after the 3rd real-hardware attempt hung silently with no
+# visible response to keyboard input, to debug blind instead of guessing configs. ---
+if [ -n "$ESP_DEV" ]; then
+  mkdir -p /mnt/esp/EFI/Rescue
+  # fd/tty check done OUTSIDE the redirected block below (checking fds from inside a
+  # `{ } > logfile` block just shows the block's own redirected fds, not the real ones -
+  # a mistake in an earlier version of this diagnostic).
+  {
+    echo "--- fd 0/1/2 (real, pre-diagnostics-redirect) ---"
+    ls -la /proc/self/fd/0 /proc/self/fd/1 /proc/self/fd/2 2>&1
+    echo "--- tty ---"; tty 2>&1
+  } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
+  {
+    echo "=== boot-debug $(cat /proc/uptime 2>/dev/null) ==="
+    echo "kernel: $(uname -a)"
+    echo "--- /sys/class/net ---"; ls /sys/class/net 2>&1
+    echo "--- USB devices (/sys/bus/usb/devices) ---"; ls /sys/bus/usb/devices 2>&1
+    echo "--- input devices (/proc/bus/input/devices) ---"; cat /proc/bus/input/devices 2>&1
+    echo "--- mmc block devices ---"; ls /dev/mmcblk* 2>&1
+    echo "--- dmesg tail (last 150 lines) ---"; dmesg 2>&1 | tail -150
+  } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
+fi
 
 # --- WiFi: always interactive, never baked in or persisted ---
 printf "Join WiFi now? [Y/n] "
@@ -78,7 +111,7 @@ if [ "$ans" != "n" ] && [ "$ans" != "N" ]; then
       printf 'network={\n  ssid="%s"\n  key_mgmt=NONE\n}\n' "$ssid" > /tmp/wpa_supplicant.conf
     fi
     wpa_supplicant -B -i wlan0 -c /tmp/wpa_supplicant.conf
-    udhcpc -i wlan0 -n -q
+    udhcpc -i wlan0 -n -q -s /usr/share/udhcpc/default.script
     echo "--- wlan0 ---"
     ip addr show wlan0
     echo "-------------"
@@ -122,4 +155,13 @@ dropbear -p 22 -r /etc/dropbear/dropbear_ed25519_host_key
 echo "dropbear started - ssh root@<ip-shown-above> (password)"
 
 # --- local console: unconditional root shell (the physical-access recovery path) ---
-exec /bin/sh
+# NOT `exec /bin/sh` - that would replace PID 1 with the shell, and exiting it (typing
+# `exit`) would then exit PID 1 itself, which the kernel treats as fatal (panic - "no
+# process to manage the system"). Confirmed on real hardware: `exit` from the exec'd
+# shell panicked instead of rebooting cleanly. Loop it instead so PID 1 (this script)
+# stays alive as a supervisor and exiting the shell just respawns a new one.
+echo "Dropping to a local recovery shell. 'exit' respawns a new one (safe) - use"
+echo "'reboot'/'poweroff' or the power button to actually leave."
+while true; do
+  /bin/sh
+done

@@ -1,0 +1,6 @@
+# Kernel cpio-list source (see Documentation/filesystems/ramfs-rootfs-initramfs.rst),
+# merged into CONFIG_INITRAMFS_SOURCE alongside rescue/initramfs/ by
+# scripts/build-rescue-image.sh's config step. Declares /dev/console directly in the
+# generated cpio archive - this doesn't require real mknod/CAP_MKNOD on the build host,
+# unlike creating the node as an actual file in the initramfs/ directory tree.
+nod /dev/console 0622 0 0 c 5 1

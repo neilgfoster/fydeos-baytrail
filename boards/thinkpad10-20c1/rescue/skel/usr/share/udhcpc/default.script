@@ -1,0 +1,21 @@
+#!/bin/sh
+# Minimal busybox udhcpc lease-apply script. busybox's udhcpc does NOT configure the
+# interface itself - it only runs the DHCP handshake and hands the result to a script
+# via env vars ($ip, $subnet, $router, $dns, $interface); without a script, "lease
+# obtained" gets logged but the IP is never actually applied. Found missing on the 6th
+# real-hardware boot test (DHCP succeeded per udhcpc's own log line, but `ip addr show
+# wlan0` showed no inet address at all).
+case "$1" in
+  deconfig)
+    ifconfig "$interface" 0.0.0.0
+    ;;
+  bound|renew)
+    ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+    [ -n "$router" ] && route add default gw "${router%% *}" dev "$interface" 2>/dev/null
+    if [ -n "$dns" ]; then
+      : > /etc/resolv.conf
+      for d in $dns; do echo "nameserver $d" >> /etc/resolv.conf; done
+    fi
+    ;;
+esac
+exit 0

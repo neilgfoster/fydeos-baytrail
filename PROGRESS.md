@@ -60,6 +60,28 @@ turned out to be the tablet in Connected-Standby sleep (screen off), not a real 
 resolved by the user physically waking it. Nothing to fix in tooling; just re-confirms
 these are expected, already-documented behaviors, not new bugs.
 
+### ✅ Root-caused + fixed: recurring "channel #1 unreachable" during this session
+Hit T4's known "device asleep" symptom **twice** this session (once right after the
+promotion step, once after session-close). Root-caused this time instead of just
+retrying: `Get-CimInstance Win32_Battery`/`BatteryStatus` showed the tablet was running
+on **battery** (`PowerOnline: False, Discharging: True`), and `powercfg /q SCHEME_CURRENT
+SUB_SLEEP STANDBYIDLE` showed **AC sleep-after was 0 (disabled, as CLAUDE.md already
+documented) but DC (battery) sleep-after was still 900s (15 min)** — the AC-only fix
+from an earlier session never covered battery operation. This is a Connected-Standby-only
+device (`powercfg /a`: only `Standby (Connected)` available, no S1/S2/S3/hibernate) —
+entering CS on this Broadcom SDIO WiFi + Win 8.1 combo evidently throttles/drops SSH
+reachability during the "sleep" window even though the tablet isn't fully off.
+**Fix:** `powercfg /change standby-timeout-dc 0` (matches the existing AC=0). Verified
+before/after via `powercfg /q`, channel #1 re-verified healthy immediately after. Did
+**not** touch the display-off timeout (stays independent, screen still dims/turns off
+normally) or the WiFi adapter's own power-saving mode (`Get-NetAdapterPowerManagement`/
+`powercfg` "Wireless Adapter Settings" — already Maximum Performance on AC, and this
+SDIO adapter reports `AllowComputerToTurnOffDevice: Unsupported` so that classic NIC
+power-management checkbox doesn't even apply here). Trade-off: faster battery drain when
+left idle with the screen off, since the system no longer suspends into Connected
+Standby — accepted, since staying reachable over channel #1 matters more for this
+project than idle battery life. `CLAUDE.md`'s device facts updated to say "AC and DC".
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
 1. Write the concrete, reviewed `sgdisk` partition-write command sequence as its own
@@ -70,14 +92,15 @@ these are expected, already-documented behaviors, not new bugs.
 2. Only after partitions exist for real: filesystem creation + FydeOS install, per the
    (still-draft) Phase-2 plan in T4's section below.
 
-**State at session close:** repo committed and pushed through `e8470fc` (this entry, single
-commit). ESP:
+**State at session close:** repo committed and pushed (this entry + the CLAUDE.md power
+fix, follow-up commit to `e8470fc`). ESP:
 `S:\EFI\Rescue\rescuex64.efi` is now the `sgdisk`-bundled T6 build (24,220,672 bytes),
 `rescuex64-t4proven.efi.bak` kept as rollback, `rescue-shadow.txt` unchanged. Firmware:
 pristine 6-entry baseline + persistent `Rescue Recovery` only (no leftover temp
 entries), Windows still the untouched automatic default. Disk 0 partitions: unchanged
 from T5/T6 (P1–P2 unchanged, P3 `C:` 34.00 GB, ~14.74 GB unallocated gap, P4 unchanged)
-— no `sgdisk` write against the eMMC happened this session. Channel #1 confirmed
+— no `sgdisk` write against the eMMC happened this session. Power: DC sleep-after now 0
+(matches AC), fixing the recurring mid-session unreachability. Channel #1 confirmed
 healthy at session close.
 
 ---

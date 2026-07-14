@@ -49,7 +49,11 @@ ThinkPad session and any time context may have been lost (new session / compact 
   across `192.168.1.0/24` (WiFi MAC `C4-8E-8F-04-B5-73`).
 - Hardened + proven: sshd Auto-start + auto-restart on failure; persistent firewall rule;
   pubkey+password auth both on; **survived a full reboot (back in 26s, no login)**; AC
-  sleep disabled. Details in memory `[[thinkpad10-20c1-boot-blocked]]`.
+  *and DC (battery)* sleep-after both disabled (T7, 2026-07-14 — AC=0 alone wasn't
+  enough since the tablet runs on battery a lot; DC=0 stops it dropping into Connected
+  Standby, which was silently killing SSH reachability with the screen off). Display
+  still turns off normally (separate, untouched timeout) — only the sleep/standby timer
+  changed. Details in memory `[[thinkpad10-20c1-boot-blocked]]`.
 - Remote PowerShell quoting is painful over cmd — pipe scripts via stdin:
   `ssh thinkpad10 'powershell -NoProfile -Command -' < script.ps1`.
 

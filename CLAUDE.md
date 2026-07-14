@@ -53,25 +53,31 @@ ThinkPad session and any time context may have been lost (new session / compact 
 - Remote PowerShell quoting is painful over cmd — pipe scripts via stdin:
   `ssh thinkpad10 'powershell -NoProfile -Command -' < script.ps1`.
 
-**Status of channel #2 (replacement): FUNCTIONALITY PROVEN (2026-07-14), rule STILL IN
-FORCE.** The rescue image (`boards/thinkpad10-20c1/rescue/`, built by
-`scripts/build-rescue-image.sh`) boots standalone, joins WiFi interactively, and gives
-password-auth SSH root — verified across **two independent successful boots** (fresh
-WiFi join + password entry each time, persisted password reused correctly on the 2nd).
-But it is **not yet an independent fallback**: it only boots via a one-time
-`{fwbootmgr} bootsequence` entry that must be armed **from Windows over channel #1**
-(`bcdedit /set {fwbootmgr} bootsequence <guid>`) — there is no persistent boot-menu
-entry yet. If channel #1 were actually lost, there is currently no way to reach channel
-#2 without physical access + the firmware Boot Menu to select it some other way. **The
-rule stays in force until a persistent (non-one-time) boot-menu entry makes channel #2
-reachable without channel #1 already being alive** — see `PROGRESS.md` T4 for the
-next-session plan to close this gap.
+**Status of channel #2: PROVEN (2026-07-14).** The rescue image
+(`boards/thinkpad10-20c1/rescue/`, built by `scripts/build-rescue-image.sh`) is a second,
+independent boot+SSH method. It is reachable via the **persistent** `Rescue Recovery`
+entry in the firmware Boot Menu (volume buttons at power-on) — **verified reaching it
+with zero involvement of channel #1**: physical power-off, physical Boot Menu selection,
+WiFi join at the local console, password-auth SSH root over WiFi. Windows remains the
+untouched, fully-automatic default (`{fwbootmgr}` displayorder unchanged, `timeout=0`,
+no `bootsequence` override) — the rescue entry is purely an additional selectable option.
 
-Known limitations of the rescue image (see `PROGRESS.md` T4 for full detail): WiFi
-SSID/password must be entered interactively every boot (by design, never baked in);
-`reboot`/`poweroff` from within it do not reliably return to Windows (a hard power-off
-is the proven path back); password reset for the rescue root account is done by
-overwriting `S:\EFI\Rescue\rescue-shadow.txt` over channel #1, or via the local
-console's unconditional root shell if channel #1 is also down.
+**This satisfies the condition that lifts the hard rule.** The rules below (never drop
+sshd without a proven parallel channel, prove-new-before-deprecating-old, etc.) remain
+good practice and should still guide caution around destructive steps — but the
+*blocking* condition ("losing SSH = losing the box") no longer holds: if Windows sshd
+were lost, the tablet remains recoverable via physical Boot Menu → Rescue Recovery →
+WiFi → SSH, independent of Windows entirely.
+
+**Rescue image access details:**
+- Root SSH, password-auth only (no baked keys) — password persisted at
+  `S:\EFI\Rescue\rescue-shadow.txt` on the ESP, resettable by overwriting that file
+  (over channel #1, or via the rescue image's own local console if channel #1 is down).
+  Value is in local memory `[[thinkpad10-20c1-boot-blocked]]`, not this repo.
+- WiFi SSID/password are entered interactively every boot — never baked in.
+- **`reboot`/`poweroff` from inside the rescue image do not reliably return to
+  Windows** — a hard power-off is the proven way back to the firmware Boot Menu /
+  Windows default.
+- Full build/debug trail: `PROGRESS.md` T4.
 
 Terminal-copy commands: prefix with `clear;`/`cls`.

@@ -163,17 +163,35 @@ both times.
 - NVRAM/CLM blob still absent (device runs with default/limited channel support) — works,
   but not fully calibrated. Low priority given it works at all.
 
+### 🎉 Independent-fallback gap CLOSED — channel #2 fully PROVEN (2026-07-14, same session)
+Cleaned up the two leftover undocumented boot entries from the mystery T3-adjacent
+session (`Recovery GRUB`, `UEFI Shell probe` — firmware back to the true pristine
+6-entry baseline), then added a **persistent** (non-one-time) `Rescue Recovery` entry
+(`bcdedit /copy {bootmgr}` → set `path` to `\EFI\Rescue\rescuex64.efi`, `displayorder`
+only — never touched `bootsequence` or Windows' first/default position).
+
+**Verified reaching it with zero involvement of channel #1**: user did a physical
+power-off, used the firmware Boot Menu (volume buttons) to select `Rescue Recovery`
+directly, joined WiFi at the local console, set/reused the rescue password, and SSH
+(password-auth) was reachable at `192.168.1.133` — confirmed live (`uname -r`, `ip addr
+show wlan0` with a real DHCP lease, fresh `/proc/uptime`). Windows remained the
+untouched, fully-automatic default throughout (never rebooted into by mistake, no
+manual intervention needed for a normal boot).
+
+**This satisfies the NEVER-BREAK-SSH hard rule's lifting condition** — recorded in
+`CLAUDE.md`. The tablet is no longer a single-point-of-failure device: if Windows sshd
+were ever lost, physical Boot Menu → `Rescue Recovery` → WiFi → SSH gets back in,
+independent of Windows entirely.
+
 ### ▶ NEXT SESSION
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live (or follow the recovery
    recipe in memory `[[thinkpad10-20c1-boot-blocked]]` if `~/.ssh` is empty again).
-1. **Close the independent-fallback gap**: add a *persistent* (non-one-time) boot-menu
-   entry for `S:\EFI\Rescue\rescuex64.efi` (`bcdedit /copy {bootmgr}` without ever
-   touching `bootsequence`/`displayorder`'s Windows-default position) so it's reachable
-   via the firmware Boot Menu (volume buttons) with zero dependency on channel #1. Once
-   that's proven reachable that way, update `CLAUDE.md`'s channel #2 status line to fully
-   PROVEN — that's the line that finally lifts the hard rule's blocking condition.
-2. **Shrinking C: is still deferred** — only needed to free eMMC space for the ChromeOS
-   region (mandatory-sequence step 4, installing FydeOS), which comes after step 1 above.
+1. **Shrink C:** (33 GB free per T3) to reclaim eMMC space for the ChromeOS region —
+   the mandatory-sequence step that was deferred pending channel #2 proof, now unblocked.
+   Reversible, doesn't touch sshd or its disk region.
+2. Hand-place the ChromeOS partitions + install FydeOS to the eMMC region, per the
+   Phase-2 plan (`PROGRESS.md` T4 "DRAFT PHASE-2 PLAN", now not-so-draft). `Rescue
+   Recovery` / channel #2 remains the fallback throughout.
 
 ---
 

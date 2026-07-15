@@ -8,7 +8,95 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T10 (2026-07-15) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T11 (2026-07-15) — END STATE (resume here)
+
+**Tested T10's leading hypothesis for the boot freeze: set ChromeOS/vboot's kernel
+attribute bits (priority/tries/successful) on eMMC KERN-A via `sgdisk -A`, matching the
+SD card's proven-working reference exactly. Re-ran the same boot test — **froze at the
+identical "repairing itself" screen**. Hypothesis disproven (or at least not sufficient
+alone). Firmware/channel #1 confirmed back to pristine baseline afterward.**
+
+### Live recon (read-only, booted `Rescue Recovery`)
+Re-identified `mmcblk1` = eMMC (boot0/boot1/rpmb present, 15 partitions), `mmcblk2` = SD,
+same mapping as T10's close. Compared GPT attribute bits via `sgdisk -i`/`sgdisk -A
+N:show`: eMMC's **KERN-A (partition 5) had `Attribute flags: 0000000000000000`** — no
+bits set at all. The SD's own KERN-A (partition 2), the known-good reference for this
+exact pinned release, had **`01FF000000000000`** — bits 48–56 set, decoding per cgpt's
+known layout (priority=bits 48–51, tries=bits 52–55, successful=bit 56) to **priority 15
+(max), tries 15 (max), successful 1**. ROOT-A was zero on both disks (expected — vboot
+attribute bits only apply to kernel partitions). Confirms T10's hypothesis was
+plausible: `sgdisk` (T8) never set these bits, unlike a `cgpt`-driven install.
+
+### Fix verified safe first, off the real device
+Before touching `/dev/mmcblk1`, tested the exact `sgdisk -A` invocation against a
+throwaway loopback image in the rescue environment's own tmpfs (`/tmp/test.img`):
+`sgdisk -A 1:=:0x01FF000000000000 test.img` — confirmed the `=` sub-operation does a
+single atomic 64-bit hexmask assignment (not per-bit toggles), and reproduced the SD's
+exact attribute value byte-for-byte on the test file.
+
+### Plan drafted and signed off before any live command
+`/home/neil/.claude/plans/crispy-gathering-bumblebee.md`. Live command:
+`sgdisk -A 5:=:0x01FF000000000000 /dev/mmcblk1` — single write, one partition, one
+attribute field. Pre-write backup (`sgdisk --backup` + `sgdisk -p` text snapshot) pulled
+to local machine and sha256-verified before the write, per the established T8 pattern.
+The auto-mode permission classifier correctly blocked the first attempt at this command
+(plan-mode approval alone wasn't read as the explicit live-command sign-off `CLAUDE.md`
+requires) — re-confirmed with an explicit "proceed" before the write actually ran.
+
+### ✅ Write executed and verified — but the boot test still failed
+`sgdisk -A 5:=:0x01FF000000000000 /dev/mmcblk1` succeeded. Post-write `sgdisk -i 5`
+confirmed `Attribute flags: 01FF000000000000` (exact match to the SD reference).
+Post-write `sgdisk -p` text table diffed byte-identical to the pre-write snapshot for
+every partition's start/end/size/type/name (attributes aren't shown in `-p` text output,
+confirmed separately via `-i`) — only KERN-A's attribute field changed, nothing else
+moved.
+
+**Boot test (same disposable one-time `bcdedit` pattern as T10, reusing the ESP files
+already staged since T10): FROZE AT THE SAME "repairing itself" SCREEN.** No
+improvement over T10 — the attribute-bits fix alone did not resolve the freeze.
+Hard power-off + normal power-on landed back in Windows automatically as expected;
+channel #1 confirmed healthy with no host-key hiccup this time (rescue↔Windows swap
+handled cleanly).
+
+### ✅ Cleanup — firmware back to pristine baseline
+`bcdedit /delete {6ab6118d-160c-11f1-825c-c48e8f04b574}` — `{fwbootmgr}` reconfirmed
+back to exactly the pre-test 7-entry state. `Get-Disk -Number 0`: Online/Healthy,
+unchanged size. Channel #1 healthy at session close.
+
+**Leading hypothesis is now downgraded, not eliminated**: the attribute bits were
+plausibly *necessary* (matches known ChromeOS/vboot semantics) but evidently not
+*sufficient* — something else is also causing/contributing to the freeze. Per T10's
+already-recorded fallback, the next lead is getting real evidence from the hang itself
+(no `dmesg`/log capture has been attempted yet in either T10 or T11) rather than
+guessing at more GPT-level fixes blind.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Get real evidence from the hang itself, since two GPT-level guesses (T10's boot
+   config, T11's attribute bits) have both reached the identical freeze point without
+   new information: add `console=ttyS0,115200n8` (or similar serial console) or a more
+   verbose `loglevel=`/`earlyprintk=` setting to `boards/thinkpad10-20c1/boot/grub.cfg`'s
+   cmdline for the next boot-test pass, and/or attempt an HDMI photo of the frozen
+   screen for any visible on-screen error text. Serial capture needs a way to actually
+   read `ttyS0` output live during the freeze — confirm what's physically available
+   (USB-serial adapter, etc.) before assuming this is viable; may need a different
+   evidence-gathering approach if not.
+2. Once real evidence narrows the cause, re-run the same disposable one-time boot-test
+   pattern — reuse the now-proven `scripts/build-grub-x64.sh` / staging recipe rather
+   than re-deriving it.
+
+**State at session close:** repo unchanged this session (no new tracked files — the
+`sgdisk -A` write and boot test were both live-hardware-only, nothing to commit besides
+this log entry). eMMC ESP: unchanged from T10 (`syslinux/vmlinuz.A`, `EFI/FydeOS/
+grubx64.efi`, `EFI/FydeOS/grub.cfg` still staged, inert). eMMC GPT: KERN-A (partition 5)
+now carries `01FF000000000000` attribute bits (priority 15/tries 15/successful 1,
+matching the SD reference) — the only GPT change this session, everything else
+byte-identical to T10's close. Firmware boot manager: pristine 7-entry baseline.
+Channel #1 confirmed healthy at session close.
+
+---
+
+## ThinkPad 10 20C1 — Session T10 (2026-07-15) — END STATE (superseded by T11 above)
 
 **Designed and boot-tested T9's queued "GRUB boot config" step: built a working
 FydeOS boot path on the eMMC ESP for the real ROOT-A payload. First real-hardware boot

@@ -8,7 +8,127 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T9 (2026-07-14) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T10 (2026-07-15) — END STATE (resume here)
+
+**Designed and boot-tested T9's queued "GRUB boot config" step: built a working
+FydeOS boot path on the eMMC ESP for the real ROOT-A payload. First real-hardware boot
+test reached FydeOS's own graphical "repairing itself" recovery UI (kernel + i915/panel
++ ROOT-A rootfs all functioning) before hanging — a real, informative result, not a
+clean pass. Firmware/channel #1 confirmed back to the pristine baseline afterward.**
+
+### Plan drafted and signed off before any live command
+`/home/neil/.claude/plans/parallel-jingling-crane.md`. Approach per
+`PARTITION-DESIGN.md`'s "Chosen approach": boot off the existing eMMC ESP (no new
+EFI-SYSTEM partition) with a GRUB `linux`-boots-a-file entry, `root=PARTUUID=<ROOT-A>`,
+same shape as `boards/iconia-w4-820`. Continued T9's "reuse SD card bytes, don't build
+from source" philosophy for the kernel too.
+
+### Phase 1 — live recon (read-only, booted `Rescue Recovery`)
+Re-identified `mmcblk*` by `boot0/boot1/rpmb` identity (not assumed) — this boot: eMMC =
+`mmcblk1` (has boot0/boot1/rpmb, 15 partitions, size byte-matches Windows' `Get-Disk`
+exactly), SD = `mmcblk2` (12 partitions, no boot/rpmb nodes). Confirmed the SD's
+EFI-SYSTEM (partition 12, standard ChromeOS convention) has exactly the plain non-vboot
+boot path expected: `syslinux/vmlinuz.A` (11,817,984 B) and `efi/boot/bootx64.efi`
+(741,376 B, a real GRUB build) — same shape `iconia-install.sh` already relies on.
+Reconfirmed eMMC ROOT-A (partition 6)'s PARTUUID unchanged since T8:
+`F2E33B09-C91E-4469-A3BB-6661E0367944`. eMMC P1–4 (Windows) read back clean.
+
+### Phase 2 — design, with a real correction along the way
+Read the SD's own `efi/boot/grub.cfg` as a cmdline template — its stock "FydeOS image
+A" entry (`init=/sbin/init rootwait ro noresume loglevel=7 noinitrd audit=0 console=
+i915.modeset=1 cros_efi root=PARTUUID=...`) is simpler than Iconia's board-tuned
+cmdline and is *this exact release's own* proven boot line, so used it verbatim with
+our PARTUUID substituted in.
+
+**Did not reuse the SD's `bootx64.efi` binary as originally sketched.** `strings`
+inspection showed its embedded prefix resolves to `/efi/boot` on whatever device it
+loads from (no hardcoded partition index) — and a live listing of the eMMC ESP
+(already mounted rw by the rescue image's own init at `/mnt/esp`) found
+`EFI/Boot/bootx64.efi` **already occupied** (Lenovo's own fallback bootloader,
+`LenovoBT.EFI` alongside it). A first-choice alternative prefix, `/boot/grub` (matching
+`build-grub-ia32.sh`'s existing convention), was also rejected after confirming live:
+FAT is case-insensitive and the eMMC ESP already has a top-level `\BOOT\` directory
+(Windows', holding `boot.sdi`) — would have landed inside it. Built our **own** GRUB
+core instead via the repo's already-proven `grub-mkimage` pattern: new
+`scripts/build-grub-x64.sh` (mirrors `build-grub-ia32.sh`, x86_64-efi, prefix as a
+parameter), prefix `/EFI/FydeOS` (live-confirmed free). New tracked
+`boards/thinkpad10-20c1/boot/grub.cfg` — single auto-booting "FydeOS A" menuentry,
+`search --file` for `/syslinux/vmlinuz.A`, `timeout=0`/`default=0` (no keyboard
+needed). Built locally, sanity-checked (729,088 B, valid PE32+ x86-64 EFI app).
+
+### ✅ Phase 3 — staged and boot-tested
+Transfer gotcha: dropbear has no `sftp-server`/`scp` binary — `scp`/`scp -O` both
+failed. Worked around with base64-over-SSH (`base64 -w0 file | ssh ... 'base64 -d >
+...'`), byte-verified (sha256) after every hop. Staged, all confirmed free beforehand
+and byte-verified after: `S:\syslinux\vmlinuz.A` (copied from the SD, sha256-identical),
+`S:\EFI\FydeOS\grubx64.efi`, `S:\EFI\FydeOS\grub.cfg` — nothing existing touched
+(`EFI/Rescue`, `EFI/Boot`, `EFI/Microsoft`, `EFI/Lenovo`, `EFI/recovery`, `BOOT` all
+spot-checked present/unchanged).
+
+Disposable one-time boot entry, same T6/T7 pattern: `bcdedit /copy {bootmgr} /d "FydeOS
+Test T10"` → `{6ab6118c-160c-11f1-825c-c48e8f04b574}`, `path` set to
+`\EFI\FydeOS\grubx64.efi`, armed via `bcdedit /set {fwbootmgr} bootsequence <guid>`.
+(Noted for next time: `bcdedit /copy {bootmgr}` auto-appends the new entry to
+`{fwbootmgr}`'s `displayorder` — unlike T6/T7's write-up, which described the technique
+as touching only `bootsequence`. Not a safety problem in practice, same posture as the
+already-accepted persistent `Rescue Recovery` entry — just a detail worth knowing, and
+cleaned up along with everything else after the test.)
+
+**Boot test: real signal, not a clean pass.** User did the physical power-off/power-on.
+Reached a FydeOS graphical "Your system is repairing itself" screen (spinner) — this is
+`chromeos_startup`/`clobber-state`'s stateful-partition recovery UI, meaning the kernel
+booted, i915/panel output worked, and ROOT-A's rootfs came up far enough to run its own
+graphical recovery flow — then froze. User did a hard power-off + normal power-on per
+the known "reboot/poweroff from a foreign OS doesn't reliably return to Windows"
+limitation; landed back on Windows automatically as expected (`bootsequence` is
+self-consuming). Channel #1 reconfirmed healthy.
+
+**Leading hypothesis for the freeze (not yet investigated):** `sgdisk` (T8) doesn't set
+ChromeOS's vboot-specific GPT attribute bits (priority/tries/successful) the way `cgpt`
+does — FydeOS userspace may read the zeroed/default bits as "unclean" and enter a
+repair path that then stalls, possibly compounded by STATE being hand-built via
+`mke2fs` rather than through the installer's own clobber flow. Not confirmed — no
+`dmesg`/log evidence pulled yet (no SSH into the fresh environment, no keyboard/console
+interaction attempted this session).
+
+### ✅ Cleanup — firmware back to pristine baseline
+`bcdedit /delete {6ab6118c-160c-11f1-825c-c48e8f04b574}` — `{fwbootmgr}` reconfirmed
+back to exactly the pre-test 7-entry state (`{bootmgr}` + `Rescue Recovery` + 5
+baseline, no `bootsequence`, `timeout=0`). Disk 0 reconfirmed Online/Healthy, unchanged
+size. Channel #1 healthy at session close.
+
+**Deliberately left in place** (harmless, inert, not in any boot order — staged for the
+next debugging pass rather than cleaned up): `S:\syslinux\vmlinuz.A`,
+`S:\EFI\FydeOS\grubx64.efi`, `S:\EFI\FydeOS\grub.cfg` on the eMMC ESP.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Investigate the GPT-attribute-bits hypothesis: **read-only first** —
+   `sgdisk`/`cgpt`-equivalent dump of the current attribute bits on the eMMC's KERN-A/
+   ROOT-A (and the SD's, as a known-good reference) from inside `Rescue Recovery`, no
+   writes. If confirmed, setting them (`sgdisk -A` supports raw attribute bits) is
+   another eMMC write — needs its own plan + sign-off per the standing rule, same gate
+   as every prior write this build.
+2. If attribute bits aren't the cause: get real evidence from the hang itself — e.g. a
+   serial/HDMI photo of the frozen screen for any visible error text, or add
+   `console=ttyS0`-style verbose logging to `boards/thinkpad10-20c1/boot/grub.cfg`'s
+   cmdline for the next boot-test pass, since this session had no way to capture kernel
+   dmesg from the hung state.
+3. Re-run the same disposable one-time boot-test pattern once a fix is staged — reuse
+   the now-proven `scripts/build-grub-x64.sh` / staging recipe from this session rather
+   than re-deriving it.
+
+**State at session close:** repo has 2 new files (`scripts/build-grub-x64.sh`,
+`boards/thinkpad10-20c1/boot/grub.cfg`) plus this entry, not yet committed. eMMC ESP
+(P1): 3 new inert files staged (`syslinux/vmlinuz.A`, `EFI/FydeOS/grubx64.efi`,
+`EFI/FydeOS/grub.cfg`), nothing else changed. Firmware boot manager: pristine 7-entry
+baseline (unchanged from T9's close), Windows still the untouched automatic default.
+Disk 0 partitions: unchanged from T9 (all 15, including ROOT-A/STATE payload data).
+Channel #1 confirmed healthy at session close.
+
+---
+
+## ThinkPad 10 20C1 — Session T9 (2026-07-14) — END STATE (superseded by T10 above)
 
 **Executed T8's queued "step 1": created a real filesystem on STATE and populated ROOT-A
 with the actual FydeOS rootfs payload, on the 11 GPT partitions T8 hand-placed. Hit and

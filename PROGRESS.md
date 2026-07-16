@@ -8,7 +8,160 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T11 (2026-07-15) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T12 (2026-07-16) — END STATE (resume here)
+
+**Major session, mostly repo-external (live-device only). User obtained a USB dock —
+this reopens T3's "USB port permanently dead" finding, though with real nuance uncovered
+along the way. Explored an autonomous diagnostic-boot-test loop as a new way of
+operating on this device. Biggest concrete finding: STATE is unexpectedly wiped
+(zero bytes, no ext4 superblock) despite T9 formatting it — strong evidence the
+"repairing itself" freeze really is `clobber-state` wiping STATE and failing to
+finish rebuilding it before a ~15-minute timeout forces a reboot. Ended the session
+with a diagnostic-capture rig staged (USB stick as root, busybox + script, auto-reboot
+via SysRq) but the actual capture run not yet executed.**
+
+### Dock + USB: real capability, with an important nuance
+Firmware-level Boot Menu **does** enumerate a USB stick through the dock (distinctly
+identified, e.g. "SanDisk Cruzer") — a real reversal of T3's port-level finding. But two
+follow-up tests showed the reversal is partial:
+- **Booting the actual FydeOS installer stick via the dock through the physical Boot
+  Menu never reached GRUB at all** (confirmed with an HDMI monitor plugged into the
+  dock too: signal detected, but black — no GRUB menu, no visible content). Firmware
+  can *enumerate* dock USB as a boot candidate but doesn't reliably *execute* an EFI
+  binary from it. The "full FydeOS install from USB, like Iconia" pivot the user asked
+  about is **blocked** on this specific point — not ruled out forever, just not proven,
+  and not chased further this session (deprioritized in favor of the eMMC freeze).
+- **Dock USB peripherals plugged in during our own eMMC boot attempt got zero response**
+  (keyboard, no VT switch) at the "repairing itself" freeze — inconclusive on its own,
+  but consistent with the freeze being a genuine hang rather than an interactive
+  session waiting for input.
+- **Dock USB storage works perfectly at the Linux kernel level**, independent of the
+  firmware-boot limitation above — confirmed repeatedly inside the `Rescue Recovery`
+  environment (installer stick enumerates as `/dev/sda`, a second small stick as
+  `/dev/sdb`, both fully readable/writable by the kernel's own USB-storage/xHCI driver).
+  This is what the session's diagnostic-capture design ended up relying on.
+
+### Freeze investigation: from "hang" to "bounded, reproducible ~15-minute loop"
+Two repeats of the original `init=/sbin/init` boot (same disposable one-time
+`bootsequence` pattern as T10/T11, HDMI + keyboard connected via the dock, deliberately
+waited 15+ minutes this time instead of a couple of minutes like T10/T11 did) both
+**sat at "repairing itself" for 15+ minutes then rebooted on their own** back to
+Windows — identical both times. This is new information T10/T11 didn't have: **it's not
+an indefinite hang**, it's a bounded, perfectly reproducible retry-then-give-up cycle.
+Ruled out "first boot clobbers, second boot succeeds" as the explanation (both attempts
+behaved identically).
+
+### `init=/bin/sh` experiment + Iconia research
+Changed `grub.cfg`'s cmdline from `init=/sbin/init` to `init=/bin/sh` to bypass
+`chromeos_startup`/`clobber-state`/upstart entirely (same disposable-boot-entry pattern,
+byte-verified before/after, original backed up as `grub.cfg.t12bak` on the ESP). Result:
+some FydeOS-branded text, a frozen cursor, then an almost-instant reboot (not 15
+minutes) — initially looked like a new failure. Spawned an Explore-agent research pass
+through `PROGRESS.md`'s Iconia W4-820 history (`boards/iconia-w4-820/boot-debug.md`)
+which found Iconia hit the **identical** `Kernel panic - not syncing: Attempted to kill
+init!` doing the exact same thing, and treated it as **proof-of-life** (kernel + shell
+exec'd fine, PID 1 just exited immediately with no interactive tty) rather than a bug.
+Iconia's own working technique: don't use an interactive shell as init at all — point
+`init=` at an **unattended script** that captures diagnostics to a file and exits, no
+keyboard/serial required. Also notable from that research: Iconia never fought
+clobber-state — their eMMC install ran the real `chromeos-install`, letting the actual
+installer own STATE/partitioning entirely, avoiding this whole class of problem.
+
+### New operating mode: semi-autonomous diagnostic boot-test loop
+User asked for less back-and-forth on repeat boot tests, since the one-time
+`bootsequence` mechanism is inherently self-cleaning (next power-cycle always falls
+through to the Windows default, proven repeatedly all session). Agreed a plan
+(`/home/neil/.claude/plans/cached-forging-chipmunk.md`, second use of that file this
+session after the earlier dock/USB plan): I arm the disposable boot entry and poll
+channel #1 for return via SSH myself, the user only has to physically power-cycle and
+flag me if a cycle doesn't self-recover within ~5 minutes. Saved as a durable preference:
+memory `feedback_thinkpad10-autonomous-loops` — repeat an *already-proven* mechanism
+autonomously, but still get fresh sign-off before changing the mechanism itself.
+
+### 🔴 Real finding: STATE is wiped, likely by clobber-state itself
+Building the diagnostic-capture script, tried to write it directly onto ROOT-A (the
+original plan) — **blocked**: `mount -o rw` on ROOT-A (`mmcblk2p6` this boot) fails with
+`couldn't mount RDWR because of unsupported optional features (ff000000)`, the same
+ChromiumOS-specific ext4 feature-bit issue T9 hit with `resize2fs` (read-only mount
+still works fine). Pivoted to targeting **STATE** instead (T9's plain `mkfs.ext4`, no
+exotic features, should mount rw cleanly) — but found **STATE's ext4 superblock is
+gone entirely** (magic bytes `00 00` at the expected offset instead of `53 ef`; first 64
+bytes of the partition are all zero). Partition table itself is untouched and correct
+(`sgdisk -p`/`-i 15` confirm STATE's PARTUUID/size/offset exactly match T8's design).
+**Leading hypothesis, not yet directly confirmed via kernel dmesg**: `clobber-state`
+really does run during the `init=/sbin/init` "repairing itself" boots and wipes STATE
+as part of its recovery flow, then fails to complete a fresh format/repopulate before
+the ~15-minute timeout forces a reboot — this would explain both the 15-minute
+duration (a real, if unsuccessful, operation, not a dead hang) and why STATE is now
+empty despite T9 having formatted it.
+
+### Diagnostic rig staged (capture not yet run)
+Given ROOT-A can't be write-mounted and STATE would need reformatting mid-investigation
+(a bigger action than signed off for), pivoted again per the user's own suggestion:
+**use a second, small USB stick via the dock as the diagnostic boot's root filesystem**,
+avoiding any eMMC write at all. Concretely, this session's ending state:
+- `/dev/sdb` (this boot's mapping — "Imation Nano," ~1.92 GB, serial `07831235029C`),
+  partition `sdb1` reformatted `mkfs.ext4 -U 69488df6-f109-47ae-ac62-d46be9ea0bba -L DIAG`
+  (was factory-blank FAT, confirmed before wiping — nothing lost). Contains `/bin/sh`
+  (copied from the rescue image's own bundled BusyBox 1.35.0 — multi-call binary picks
+  its applet from argv[0]/invocation name) and `/thinkpad10-diag.sh` (byte-verified),
+  which captures `uname`/`cmdline`/`dmesg`/`mounts`/block-device listing, additionally
+  probes read-only mounts of ROOT-A, STATE, and the ESP (all best-effort, failures
+  expected/logged not fatal), writes everything to an incrementing
+  `/thinkpad10-diag-runN.log` on the stick itself, then triggers a **guaranteed** reboot
+  via kernel SysRq (`echo b > /proc/sysrq-trigger`) rather than relying on the
+  incidental panic-on-init-exit behavior.
+- `grub.cfg` updated accordingly: `root=UUID=69488df6-f109-47ae-ac62-d46be9ea0bba rw
+  rootwait`, `init=/thinkpad10-diag.sh` (previous `/bin/sh` version backed up as
+  `grub.cfg.t12c-bak` on the ESP, byte-verified before/after via independent re-mount).
+  ROOT-A and STATE are both left completely untouched by this design.
+- Session ended **before** actually running the boot-test loop — next session's first
+  job is to execute it.
+
+### Channel #1 / firmware state at close
+Confirmed healthy after the whole session's rescue-image work (hit and correctly
+diagnosed the standard dropbear↔OpenSSH host-key swap gotcha one more time). Disk 0:
+Online/Healthy, 62,537,072,640 bytes, unchanged. `{fwbootmgr}`: `{bootmgr}` first,
+`Rescue Recovery` present, 5 stock entries, **plus the disposable test entry
+`{6ab61191-160c-11f1-825c-c48e8f04b574}`** deliberately left in the BCD store (not in
+`bootsequence` — nothing armed right now) since the next session reuses it as-is
+(same path `\EFI\FydeOS\grubx64.efi`, now serving the new diagnostic `grub.cfg`) rather
+than creating yet another disposable entry.
+
+### ▶ NEXT SESSION
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. **Physically required**: the USB stick (`DIAG`, UUID
+   `69488df6-f109-47ae-ac62-d46be9ea0bba`) must stay plugged into the dock — it's now
+   the boot-test's root filesystem. The FydeOS installer stick isn't needed for this
+   loop and can be removed if convenient.
+2. Run the semi-autonomous loop per
+   `/home/neil/.claude/plans/cached-forging-chipmunk.md`: re-arm `bootsequence` to
+   `{6ab61191-160c-11f1-825c-c48e8f04b574}`, user power-cycles, Claude polls channel #1
+   for return (bounded ~5 min) instead of asking the user to watch/report — repeat a
+   few times to check reproducibility.
+3. Retrieval checkpoint: boot `Rescue Recovery`, join WiFi, mount `/dev/sdb1` (device
+   letter may differ — reconfirm by identity/label `DIAG`, not assumed), pull all
+   `thinkpad10-diag-runN.log` files, analyze (especially whether `dmesg` shows anything
+   that looks like `clobber-state`/stateful-wipe activity, confirming or refuting this
+   session's leading hypothesis).
+4. Depending on findings: either fix whatever's blocking clobber-state from completing,
+   or reconsider letting a real installer (`chromeos-install`) own STATE/partitioning
+   entirely instead of continuing to hand-maintain it — same lesson Iconia's history
+   already pointed at.
+
+**State at session close:** repo unchanged (no new tracked files this session — all
+work was live-device + `~/.claude/plans/` + memory). eMMC: ROOT-A and STATE completely
+untouched by this session's diagnostic-rig work (STATE remains unformatted/wiped from
+whatever happened during the two `init=/sbin/init` repeats). eMMC ESP: `grub.cfg` now
+the diagnostic version (root on external USB stick), `grub.cfg.t12bak` (pre-session,
+`init=/sbin/init`) and `grub.cfg.t12c-bak` (mid-session, `init=/bin/sh`) both kept as
+backups, `vmlinuz.A`/`grubx64.efi` unchanged. External: USB stick `DIAG` holds the
+capture rig. Firmware: pristine baseline + disposable test entry left in place
+(unarmed) for next session's reuse. Channel #1 confirmed healthy at close.
+
+---
+
+## ThinkPad 10 20C1 — Session T11 (2026-07-15) — END STATE (superseded by T12 above)
 
 **Tested T10's leading hypothesis for the boot freeze: set ChromeOS/vboot's kernel
 attribute bits (priority/tries/successful) on eMMC KERN-A via `sgdisk -A`, matching the

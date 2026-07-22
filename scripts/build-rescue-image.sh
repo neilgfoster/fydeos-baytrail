@@ -174,6 +174,12 @@ cmd_initramfs(){
 
 cmd_build(){
   deps; cd "$SRC"
+  # Force the built-in initramfs to regenerate. The kernel's cpio dependency tracking
+  # does NOT reliably detect in-place content changes to files under the initramfs tree
+  # - T14 hit this: an initramfs-only edit (skel/init) rebuilt to a byte-identical image
+  # with a stale cpio, silently shipping the old init. Dropping the cached archive before
+  # every build guarantees the current initramfs tree is embedded.
+  rm -f usr/initramfs_data.cpio
   make -j"$JOBS" bzImage
   mkdir -p "$RD/out"; cp -f arch/x86/boot/bzImage "$RD/out/rescuex64.efi"
   # `file`(1) classifies an EFI-stub bzImage as "Linux kernel x86 boot executable"

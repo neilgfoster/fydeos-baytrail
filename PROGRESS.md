@@ -112,7 +112,38 @@ disposable entry, restored the clean firmware baseline.
 device and read it from Windows, zero eMMC writes — the T12/T13 diagnostic deadlock is
 broken.
 
+### 🟢 T14 further: unattended diag-mode — no rescue sign-in needed
+Made the diagnostic loop **fully hands-off**, drivable entirely from Windows (channel
+#1). Added a diag-mode branch to the rescue init (`skel/init`): if an ESP marker
+`EFI/Rescue/diag-mode` exists, the boot runs the probe, **removes the marker** (one-shot,
+so a stray Rescue Recovery boot can't loop), and **SysRq-reboots straight back to
+Windows** — no WiFi prompt, no shell, no console, no network at all (fully consistent
+with the never-bake-in-WiFi rule). Loop from Windows: create the marker → stage/arm a
+disposable `bootsequence` → `shutdown /r`; the box boots rescue, captures diagnostics to
+`boot-debug.log`, and returns to Windows on its own; then read the log from Windows.
+**Boot-tested end-to-end this session**: fired one `shutdown /r`, channel #1 returned by
+itself (poll attempt 9), marker consumed, fresh probe + `=== diag-mode auto-reboot ===`
+line in the log — **zero physical presence required**. The interactive WiFi/console path
+is unchanged for when a live rescue session is wanted. Promoted the diag-mode image to
+`rescuex64.efi` (probe-only kept as `rescuex64-t14probe.efi.bak`).
+
+**Build-script bug fixed:** `scripts/build-rescue-image.sh` now `rm -f
+usr/initramfs_data.cpio` before every `make bzImage`. The kernel's cpio dependency
+tracking silently reused a stale initramfs on an initramfs-only edit (rebuilt to a
+byte-identical image, shipping the OLD init) — dropping the cache guarantees the current
+tree is embedded. Cost ~an hour of confusion this session; won't recur.
+
+**Power tweak (T14):** `powercfg /change monitor-timeout-ac 0` + AC wireless power-saving
+→ Max Performance. Found **AC display-off was already 0** — the recurring SSH drop is the
+**DC (battery) display-off at 300 s**, so keep the tablet on AC during work (or set DC
+display-off to 0 too; deferred, battery-drain trade-off per T7). One such drop hit
+mid-session during an `scp` (screen off on battery) — waking the screen restored channel
+#1, exactly the documented pattern.
+
 ### ▶ NEXT SESSION — root-cause the STATE non-rebuild
+**Diagnostic runs are now zero-touch** — from Windows: create `S:\EFI\Rescue\diag-mode`,
+arm a disposable `bootsequence` to a rescue entry, `shutdown /r`, poll channel #1, read
+`boot-debug.log`. Use this freely.
 0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
 1. Environment is now fully characterized (STATE wiped; ROOT-A/GPT/vboot all fine). Open
    question: **why does `clobber-state`/`chromeos_startup` wipe STATE but never
@@ -129,12 +160,15 @@ broken.
 3. Strategic fallback unchanged: let the real `chromeos-install` own STATE/partitioning
    (Iconia lesson, T12).
 
-**State at session close:** repo has **two tracked changes** committed this session —
-this `PROGRESS.md` entry and `boards/thinkpad10-20c1/rescue/skel/init` (+26-line
-ROOT-A/STATE/GPT probe, boot-tested + promoted). Rescue image (channel #2) upgraded:
-`rescuex64.efi` now includes the probe (sha256 `25e8e15a…`); prior T9 build kept as
-`rescuex64-t9proven.efi.bak` (plus older `-t4proven`/`-t6t7proven` baks) for instant
-rollback. eMMC ESP `EFI/FydeOS/grub.cfg`: still the console-visibility diagnostic version
+**State at session close:** repo has **three tracked changes** this session — this
+`PROGRESS.md` entry, `boards/thinkpad10-20c1/rescue/skel/init` (ROOT-A/STATE/GPT probe +
+unattended diag-mode branch), and `scripts/build-rescue-image.sh` (force-regen the
+initramfs cpio). Rescue image (channel #2) upgraded and boot-tested twice: `rescuex64.efi`
+is now the **diag-mode** build (sha256 `fbb2d49f…`); the intermediate probe-only build is
+kept as `rescuex64-t14probe.efi.bak`, and the prior T9 build as `rescuex64-t9proven.efi.bak`
+(plus older `-t4proven`/`-t6t7proven` baks) for rollback. Windows power: AC display-off
+`0` (was already), AC wireless Max-Perf; DC display-off still 300 s (drop risk on battery
+only). eMMC ESP `EFI/FydeOS/grub.cfg`: still the console-visibility diagnostic version
 (inert unless a disposable entry is armed); grub.cfg backups unchanged from the earlier
 T14 close. eMMC ROOT-A: healthy FydeOS rootfs (re-verified this session). eMMC STATE:
 **still wiped** (now directly confirmed, not repaired). Firmware: pristine Windows default

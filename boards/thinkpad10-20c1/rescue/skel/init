@@ -106,6 +106,25 @@ if [ -n "$ESP_DEV" ]; then
   } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
 fi
 
+# --- Unattended DIAG MODE (T14+): if the ESP marker EFI/Rescue/diag-mode exists, this
+# boot is a hands-off diagnostic capture driven entirely from Windows (channel #1). The
+# probe above has already written boot-debug.log, so just note it, REMOVE the marker
+# (one-shot - each run must be re-armed from Windows, so a stray Rescue Recovery boot can
+# never loop), flush, and SysRq-reboot straight back to Windows (bootsequence
+# self-consumes). No WiFi prompt, no shell, no console interaction. Marker absent =
+# normal interactive rescue below. Uses NO network at all - fully consistent with the
+# never-bake-in-WiFi rule. ---
+if [ -n "$ESP_DEV" ] && [ -f /mnt/esp/EFI/Rescue/diag-mode ]; then
+  echo "DIAG MODE: marker found - diagnostics captured, auto-rebooting to Windows"
+  echo "=== diag-mode auto-reboot $(cat /proc/uptime 2>/dev/null) ===" >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
+  rm -f /mnt/esp/EFI/Rescue/diag-mode
+  sync; sync
+  echo 1 > /proc/sys/kernel/sysrq
+  echo b > /proc/sysrq-trigger
+  # SysRq 'b' is immediate; if it somehow doesn't fire, don't hang silently - fall
+  # through to the normal interactive flow below as a manual recovery path.
+fi
+
 # --- WiFi: always interactive, never baked in or persisted ---
 printf "Join WiFi now? [Y/n] "
 read -r ans

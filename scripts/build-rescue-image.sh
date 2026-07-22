@@ -46,7 +46,7 @@ deps(){
   for t in make gcc bc bison flex cpio busybox rsync; do
     command -v "$t" >/dev/null || { echo "MISSING toolchain: $t (apt install build-essential bc bison flex libssl-dev libelf-dev cpio kmod rsync)"; exit 1; }
   done
-  for pkg_bin in /bin/busybox:busybox-static /usr/sbin/dropbear:dropbear-bin /sbin/wpa_supplicant:wpasupplicant /usr/sbin/sgdisk:gdisk /sbin/mke2fs:e2fsprogs /sbin/resize2fs:e2fsprogs /sbin/e2fsck:e2fsprogs; do
+  for pkg_bin in /bin/busybox:busybox-static /usr/sbin/dropbear:dropbear-bin /sbin/wpa_supplicant:wpasupplicant /usr/sbin/sgdisk:gdisk /sbin/mke2fs:e2fsprogs /sbin/resize2fs:e2fsprogs /sbin/e2fsck:e2fsprogs /sbin/debugfs:e2fsprogs; do
     p=${pkg_bin%%:*}; pkg=${pkg_bin##*:}
     [ -e "$p" ] || { echo "MISSING $p - apt install $pkg (and enable non-free-firmware for firmware-brcm80211)"; exit 1; }
   done
@@ -137,6 +137,14 @@ cmd_initramfs(){
   for alias in mkfs.ext2 mkfs.ext3 mkfs.ext4; do
     ln -sf mke2fs "$IMROOT/sbin/$alias"
   done
+
+  # debugfs: e2fsprogs' interactive ext2/3/4 editor - needed to modify ROOT-A OFFLINE on
+  # the raw partition. ChromeOS marks ROOT-A read-only via ext4 ro_compat bits (0xff000000),
+  # so the rescue kernel refuses `mount -o rw` ("couldn't mount RDWR because of unsupported
+  # optional features") and a live `sed -i` is impossible. `debugfs -w` writes the block
+  # device directly, bypassing the VFS mount path, which is how we drop `--encrypted_stateful`
+  # from ROOT-A's /etc/init/startup.conf to break the clobber-state STATE-wipe loop (T15).
+  copy_with_libs /sbin/debugfs  sbin
 
   # WiFi firmware: from Debian's firmware-brcm80211 (non-free-firmware component -
   # `apt-get install firmware-brcm80211`). This device's actual chip identifies itself

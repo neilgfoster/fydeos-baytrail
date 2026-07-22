@@ -8,7 +8,74 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T15 (2026-07-22) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T16 (2026-07-22) — END STATE (resume here)
+
+**BREAKTHROUGH: the "system is repairing itself" clobber loop is SOLVED — and it corrects
+T15's fix (not its root cause).** T15 was right that *encrypted stateful* is the cause
+(tpm2-simulator chicken-and-egg). The error was the *edit*: `chromeos_startup` on FydeOS-slim
+R20-16503 is the modern **Rust** binary with **hyphenated** flags. Encrypted stateful is
+**on by default** and is disabled ONLY by **`--no-encrypted-stateful`**. Removing the old
+underscore token `--encrypted_stateful` (T15) did nothing — it was ignored, default stayed on.
+
+### What was proven / done
+- **Rescue image gained `debugfs`** (e2fsprogs) via `scripts/build-rescue-image.sh`, and a
+  new **zero-touch `fix-mode`** block in `rescue/skel/init` (marker `EFI/Rescue/fix-mode`:
+  debugfs-edits ROOT-A `startup.conf` + mkfs STATE, gated so a failed edit never wipes STATE).
+  Rebuilt to **kernel #19**, boot-proven, and **promoted to canonical `rescuex64.efi`** (old
+  #15 → `rescuex64-t15proven.efi.bak`); Rescue Recovery repointed to `\EFI\Rescue\rescuex64.efi`.
+- **ROOT-A edit recipe (de-risked on a loopback ext4 first):** ROOT-A has ext4 `ro_compat`
+  bits `ff000000` → kernel refuses rw-mount AND `debugfs -w <dev>` refuses to auto-open
+  ("unsupported read-only feature(s)"). Working recipe: `debugfs` with **no device on the
+  cmdline**, then **`open -w -f <dev>` inside** to force past it. Maintains `metadata_csum`
+  (fsck-clean). RO `dump` is fine for reading.
+- **Applied fix (live on device):** ROOT-A `/etc/init/startup.conf` →
+  `exec chromeos_startup --verbosity=1 --no-encrypted-stateful`. STATE = `mkfs.ext4 -L H-STATE`
+  + `touch .developer_mode`.
+- **Result: clobber loop GONE.** STATE now **persists** (`53 ef`, no re-wipe). FydeOS boots to
+  the **splash logo**. (Earlier failed attempts this session, for the record: removing
+  `--encrypted_stateful` alone = still repairing; adding `.developer_mode` alone = still
+  repairing — that marker guards a *different* empty-dev-stateful wipe path.)
+
+### New, separate problem (where T17 picks up)
+FydeOS now boots past `chromeos_startup` to the splash, then does a **normal userspace reboot**
+(`reboot.conf` on `runlevel 6` → `chromeos_shutdown` → `reboot --force`), repeatably, never
+reaching OOBE — an **early first-boot reboot loop**. **NOT a kernel panic** (goes through
+runlevel 6). Rescue-inspected after a FydeOS boot: our STATE mounts but is **empty** (only the
+`.developer_mode` we placed; no `unencrypted/`, `var_overlay`, `dev_image`), no logs, pstore
+unavailable → reboot is very early and **nothing persists to stateful**. `cryptohomed`'s
+reboot-on-completion needs `/mnt/stateful_partition/decrypt_stateful` (absent) so that's not
+it. Suspected: tpm2-simulator state still isn't landing/persisting in stateful → TPM never
+settles → first boot keeps requesting a reboot.
+
+### ▶ NEXT SESSION (T17) — get the boot log, then chase the reboot
+1. **Build a boot trace** (blind cycles won't crack it): an init / `chromeos_startup` wrapper,
+   or an early upstart job, that logs progress markers + `dmesg` to the **now-persistent STATE**
+   partition; then read it back from the rescue image. This is the key unlock.
+2. **Try pre-populating the full installer stateful skeleton** before a boot — from
+   `/usr/sbin/chromeos-install.sh` `install_stateful`: `unencrypted/`,
+   `unencrypted/tpm2-simulator`, `var_overlay/{db/pkg,lib/portage}`, `dev_image` — in case
+   `chromeos_startup` isn't actually using/persisting our STATE.
+3. Observability note: FydeOS boots are **not remotely observable** (Windows sshd down while
+   FydeOS runs, no SSH into FydeOS); user must watch the screen + hard-power-off to return.
+   The persistent STATE + a boot trace is how we make it debuggable without eyes-on-screen.
+
+### Device end state (T16 close)
+- **Channel #1 up** (`.139`), **channel #2 = #19** promoted to `rescuex64.efi` (proven).
+- `{fwbootmgr}`: Windows default (`{bootmgr}` first), **bootsequence clear**, FydeOS entry
+  `{6ab61191}` → `\EFI\FydeOS\grubx64.efi`, Rescue Recovery `{6ab61189}` → `rescuex64.efi`.
+- **ESP `\EFI\FydeOS\grub.cfg` = canonical `init=/sbin/init`** (diagnostic version backed up as
+  `grub.cfg.t16-diagbak`). ROOT-A: `--no-encrypted-stateful` applied. STATE: `H-STATE` ext4 +
+  `.developer_mode` (empty otherwise). ROOT-A/GPT healthy. TPM still CLEARED/unowned.
+- One **FAT_FILE_SYSTEM BSOD** (`0x23`) mid-session during ESP `Copy-Item` churn — box
+  auto-recovered to Windows, ESP intact. Lesson: **minimize ESP mount/write transactions**
+  (one `mountvol` per batch).
+- Repo changes (uncommitted): `scripts/build-rescue-image.sh` (+debugfs), `rescue/skel/init`
+  (+fix-mode block), this `PROGRESS.md`, memory `[[project_thinkpad10-statewipe-rootcause]]`.
+  `out/rescuex64.efi` rebuilt to #19 (deployed).
+
+---
+
+## ThinkPad 10 20C1 — Session T15 (2026-07-22) — END STATE (superseded by T16 above)
 
 **The big one: STATE-wipe root cause found and CONFIRMED, end to end.** The "system is
 repairing itself" loop is `clobber-state` wiping stateful every boot because

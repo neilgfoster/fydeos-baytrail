@@ -158,6 +158,91 @@ if [ -n "$ESP_DEV" ] && [ -f /mnt/esp/EFI/Rescue/recon-startup ]; then
   rm -f /mnt/esp/EFI/Rescue/recon-startup
 fi
 
+# --- Unattended FIX MODE (T16+): if the ESP marker EFI/Rescue/fix-mode exists, this
+# boot performs the Option-1 bring-up fix zero-touch (chosen by the user over an
+# interactive rescue-SSH session): (1) drop `--encrypted_stateful` from ROOT-A's
+# /etc/init/startup.conf so chromeos_startup mounts a PLAIN stateful (breaks the
+# encstateful/tpm2-simulator clobber loop proven in T15), then (2) lay a fresh clean ext4
+# on STATE. Everything is logged to boot-debug.log for read-back over channel #1.
+#
+# ROOT-A is edited OFFLINE with `debugfs`, never mounted rw: ChromeOS sets ext4 ro_compat
+# bits 0xff000000, so `mount -o rw` is refused AND `debugfs -w <dev>` refuses to auto-open
+# ("unsupported read-only feature(s)"). The working recipe (proven on a loopback ext4 with
+# faked ChromeOS ro_compat bits + metadata_csum before shipping): read side uses a plain
+# read-only `dump` (RO open tolerates ro_compat); the write side uses `open -w -f` INSIDE
+# debugfs (no device on the command line - passing one auto-opens RO and makes the inner
+# open a no-op) to FORCE past the ro_compat refusal. debugfs maintains metadata_csum across
+# the rm/write (verified fsck-clean). STATE mkfs is GATED on the ROOT-A edit verifying, so a
+# failed edit never wipes STATE. One-shot: marker removed before the reboot. ---
+if [ -n "$ESP_DEV" ] && [ -f /mnt/esp/EFI/Rescue/fix-mode ]; then
+  EMMC="${ESP_DEV%p1}"; ROOTA="${EMMC}p6"; STATE="${EMMC}p15"
+  FIX_OK=no
+  {
+    echo "=== thinkpad10 FIX MODE $(cat /proc/uptime 2>/dev/null) ==="
+    echo "eMMC=$EMMC  ROOT-A=$ROOTA  STATE=$STATE"
+    # 1. dump current startup.conf (RO open - tolerates ro_compat)
+    if debugfs -R "dump /etc/init/startup.conf /tmp/sc.orig" "$ROOTA" >/dev/null 2>&1 \
+       && [ -s /tmp/sc.orig ]; then
+      echo "--- startup.conf BEFORE ---"; cat /tmp/sc.orig
+      ORIG_MODE=$(debugfs -R "stat /etc/init/startup.conf" "$ROOTA" 2>/dev/null \
+                  | sed -n 's/.*Mode:  0*\([0-7][0-7]*\).*/\1/p')
+      [ -n "$ORIG_MODE" ] || ORIG_MODE=644
+      echo "orig mode: $ORIG_MODE"
+      # 2. edit: strip the flag (leading space so the rest of the exec line is untouched)
+      sed 's/ --encrypted_stateful//' /tmp/sc.orig > /tmp/sc.new
+      echo "--- startup.conf AFTER (proposed) ---"; cat /tmp/sc.new
+      # 3. sanity gates - refuse to proceed on anything unexpected
+      if ! grep -q 'chromeos_startup' /tmp/sc.new; then
+        echo "FIX ABORT: chromeos_startup line missing after edit"
+      elif grep -q -- '--encrypted_stateful' /tmp/sc.new; then
+        echo "FIX ABORT: --encrypted_stateful still present after edit"
+      elif cmp -s /tmp/sc.orig /tmp/sc.new; then
+        echo "FIX ABORT: edit made no change (flag not present in original?)"
+      else
+        # 4. forced RW write (open -w -f INSIDE debugfs; no device on the cmdline)
+        debugfs >/tmp/fix-dbg.log 2>&1 <<DBGEOF
+open -w -f $ROOTA
+rm /etc/init/startup.conf
+write /tmp/sc.new /etc/init/startup.conf
+sif /etc/init/startup.conf mode 0100${ORIG_MODE}
+close
+DBGEOF
+        echo "--- debugfs write session ---"; cat /tmp/fix-dbg.log
+        # 5. verify by re-dumping from disk
+        debugfs -R "dump /etc/init/startup.conf /tmp/sc.verify" "$ROOTA" >/dev/null 2>&1
+        echo "--- startup.conf VERIFY (re-read from disk) ---"; cat /tmp/sc.verify
+        if grep -q 'chromeos_startup' /tmp/sc.verify \
+           && ! grep -q -- '--encrypted_stateful' /tmp/sc.verify; then
+          echo "ROOT-A EDIT: OK (verified on disk)"
+          FIX_OK=yes
+        else
+          echo "ROOT-A EDIT: FAILED verification - STATE will NOT be touched"
+        fi
+      fi
+    else
+      echo "FIX ABORT: could not dump startup.conf from ROOT-A (empty or debugfs error)"
+    fi
+    # 6. mkfs STATE - only if the ROOT-A edit verified
+    if [ "$FIX_OK" = yes ]; then
+      echo "--- mkfs.ext4 STATE ($STATE) ---"
+      if mkfs.ext4 -F -q "$STATE" >/tmp/mkfs.log 2>&1; then
+        cat /tmp/mkfs.log
+        echo "STATE mkfs.ext4: OK"
+        echo "--- STATE ext4 superblock magic (should be 53ef) ---"
+        dd if="$STATE" bs=1 skip=1080 count=2 2>/dev/null | od -An -tx1
+      else
+        echo "STATE mkfs.ext4: FAILED"; cat /tmp/mkfs.log
+      fi
+    fi
+    echo "=== FIX MODE done (FIX_OK=$FIX_OK) $(cat /proc/uptime 2>/dev/null) ==="
+  } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
+  rm -f /mnt/esp/EFI/Rescue/fix-mode
+  sync; sync
+  echo 1 > /proc/sys/kernel/sysrq
+  echo b > /proc/sysrq-trigger
+  # SysRq 'b' is immediate; if it somehow doesn't fire, fall through to interactive below.
+fi
+
 # --- Unattended DIAG MODE (T14+): if the ESP marker EFI/Rescue/diag-mode exists, this
 # boot is a hands-off diagnostic capture driven entirely from Windows (channel #1). The
 # probe above has already written boot-debug.log, so just note it, REMOVE the marker

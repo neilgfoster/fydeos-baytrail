@@ -133,12 +133,20 @@ tracking silently reused a stale initramfs on an initramfs-only edit (rebuilt to
 byte-identical image, shipping the OLD init) — dropping the cache guarantees the current
 tree is embedded. Cost ~an hour of confusion this session; won't recur.
 
-**Power tweak (T14):** `powercfg /change monitor-timeout-ac 0` + AC wireless power-saving
-→ Max Performance. Found **AC display-off was already 0** — the recurring SSH drop is the
-**DC (battery) display-off at 300 s**, so keep the tablet on AC during work (or set DC
-display-off to 0 too; deferred, battery-drain trade-off per T7). One such drop hit
-mid-session during an `scp` (screen off on battery) — waking the screen restored channel
-#1, exactly the documented pattern.
+**Power tweak (T14):** Found **AC display-off was already 0** — the recurring SSH drop is
+the display idle-timeout, and it was the **DC (battery) display-off at 300 s** that still
+bit (one drop hit mid-session during an `scp` on battery — waking the screen restored
+channel #1, the documented pattern). Fixed **both**: `powercfg /change monitor-timeout-ac
+0` + `monitor-timeout-dc 0`, plus AC wireless power-saving → Max Performance. Idle
+display-off is now disabled on AC *and* battery (battery-drain trade-off accepted).
+Standby AC/DC already 0 from T7. See `[[thinkpad10-20c1-boot-blocked]]` T14 update.
+
+**Confirmatory run:** exercised the zero-touch loop once more at session end (create
+marker → arm Rescue Recovery `bootsequence` → `shutdown /r` → poll → read log) — channel
+#1 returned on its own, marker consumed, and the fresh probe **re-confirmed STATE still
+wiped** (`00 00` magic, ro-mount fails) / ROOT-A healthy. eMMC enumerated as `mmcblk2`
+this boot (swapped from `mmcblk1` last boot) — the ESP-derived device logic handled it,
+as designed.
 
 ### ▶ NEXT SESSION — root-cause the STATE non-rebuild
 **Diagnostic runs are now zero-touch** — from Windows: create `S:\EFI\Rescue\diag-mode`,
@@ -166,9 +174,10 @@ unattended diag-mode branch), and `scripts/build-rescue-image.sh` (force-regen t
 initramfs cpio). Rescue image (channel #2) upgraded and boot-tested twice: `rescuex64.efi`
 is now the **diag-mode** build (sha256 `fbb2d49f…`); the intermediate probe-only build is
 kept as `rescuex64-t14probe.efi.bak`, and the prior T9 build as `rescuex64-t9proven.efi.bak`
-(plus older `-t4proven`/`-t6t7proven` baks) for rollback. Windows power: AC display-off
-`0` (was already), AC wireless Max-Perf; DC display-off still 300 s (drop risk on battery
-only). eMMC ESP `EFI/FydeOS/grub.cfg`: still the console-visibility diagnostic version
+(plus older `-t4proven`/`-t6t7proven` baks) for rollback. Windows power: **AC + DC
+display-off both `0`** now, AC wireless Max-Perf, standby AC/DC `0` — the idle
+display-off SSH-drop trigger is disabled on both power sources (battery-drain trade-off
+accepted). eMMC ESP `EFI/FydeOS/grub.cfg`: still the console-visibility diagnostic version
 (inert unless a disposable entry is armed); grub.cfg backups unchanged from the earlier
 T14 close. eMMC ROOT-A: healthy FydeOS rootfs (re-verified this session). eMMC STATE:
 **still wiped** (now directly confirmed, not repaired). Firmware: pristine Windows default

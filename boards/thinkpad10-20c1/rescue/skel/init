@@ -106,6 +106,58 @@ if [ -n "$ESP_DEV" ]; then
   } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
 fi
 
+# --- STARTUP/CLOBBER recon (T15+): read-only. Gated on the one-shot ESP marker
+# EFI/Rescue/recon-startup. Answers, with ZERO eMMC writes: (a) what chromeos_startup /
+# clobber-state actually are on this build (ELF binary vs shell script - R20/CrOS-116-era
+# builds ship them compiled ELF, confirmed T15, which changes how we'd later drive them),
+# dumping any shell wrappers / upstart jobs verbatim; and (b) a STATE zero-map - non-zero
+# byte counts sampled at fixed offsets WITHIN the partition (size read from sysfs, offsets
+# past the end skipped - T15: sampling past the 10.7GiB end wedged the boot), to test
+# whether clobber's wipe ran front-to-back but never mkfs'd (all sampled == zeros) vs only
+# the superblock gone. Every raw-disk read is timeout-guarded so a slow/bad region can
+# never block the diag-mode auto-reboot below. Read back from boot-debug.log over the
+# Windows SSH channel. Rides the diag-mode reboot. ---
+if [ -n "$ESP_DEV" ] && [ -f /mnt/esp/EFI/Rescue/recon-startup ]; then
+  {
+    echo "=== thinkpad10 STARTUP/CLOBBER recon $(cat /proc/uptime 2>/dev/null) ==="
+    echo "eMMC=$EMMC  ROOT-A=$ROOTA  STATE=$STATE"
+    mkdir -p /mnt/roota
+    if timeout 20 mount -t ext4 -o ro "$ROOTA" /mnt/roota 2>&1; then
+      for f in /sbin/chromeos_startup /usr/sbin/chromeos_startup \
+               /sbin/clobber-state /usr/sbin/clobber-state \
+               /sbin/clobber-log /usr/sbin/clobber-log; do
+        p="/mnt/roota$f"
+        [ -e "$p" ] || continue
+        echo "--- $f ---"; ls -l "$p" 2>&1
+        printf 'first4: '; timeout 5 dd if="$p" bs=1 count=4 2>/dev/null | od -An -tx1 2>&1  # 7f454c46=ELF
+      done
+      echo "--- sbin/usr-sbin entries matching clobber|startup|stateful ---"
+      ls /mnt/roota/sbin /mnt/roota/usr/sbin 2>/dev/null | grep -Ei 'clobber|startup|stateful' 2>&1
+      echo "--- upstart jobs mentioning clobber|stateful|chromeos_startup ---"
+      grep -rlEi 'clobber|stateful|chromeos_startup' /mnt/roota/etc/init 2>/dev/null
+      for f in /mnt/roota/etc/init/*startup*.conf /mnt/roota/etc/init/*clobber*.conf \
+               /mnt/roota/etc/init/pre-startup.conf /mnt/roota/etc/init/chromeos_startup.conf; do
+        [ -e "$f" ] || continue
+        echo "===== ${f#/mnt/roota} ====="; cat "$f" 2>&1
+      done
+      umount /mnt/roota
+    else echo "ROOT-A ro mount FAILED (recon)"; fi
+    # STATE zero-map, BOUNDED to the real partition size (T15 hang fix: sampling past the
+    # 10.7GiB partition end wedged the boot and blocked the diag-mode auto-reboot below).
+    # Read size from sysfs (512B sectors -> MiB), skip any offset >= size, timeout each dd.
+    STATE_SECT=$(cat "/sys/class/block/$(basename "$STATE")/size" 2>/dev/null)
+    STATE_MIB=$(( ${STATE_SECT:-0} / 2048 ))
+    echo "--- STATE zero-map (bounded; nonzero bytes per 1MiB sample; 0=all-zero) ---"
+    echo "  STATE size: ${STATE_MIB} MiB (${STATE_SECT:-?} x 512B sectors)"
+    for off in 0 1 8 64 256 1024 2048 4096 8192 10240; do
+      [ "$off" -lt "$STATE_MIB" ] || { echo "  @${off}MiB: (past end, skipped)"; continue; }
+      nz=$(timeout 10 dd if="$STATE" bs=1M skip="$off" count=1 2>/dev/null | LC_ALL=C tr -d '\000' | wc -c)
+      echo "  @${off}MiB: nonzero=$nz"
+    done
+  } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
+  rm -f /mnt/esp/EFI/Rescue/recon-startup
+fi
+
 # --- Unattended DIAG MODE (T14+): if the ESP marker EFI/Rescue/diag-mode exists, this
 # boot is a hands-off diagnostic capture driven entirely from Windows (channel #1). The
 # probe above has already written boot-debug.log, so just note it, REMOVE the marker

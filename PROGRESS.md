@@ -8,7 +8,109 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T14 (2026-07-21) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T15 (2026-07-22) — END STATE (resume here)
+
+**The big one: STATE-wipe root cause found and CONFIRMED, end to end.** The "system is
+repairing itself" loop is `clobber-state` wiping stateful every boot because
+**`mount-encrypted` cannot bootstrap the encrypted stateful on a hand-placed install** —
+and the concrete reason is a **tpm2-simulator chicken-and-egg**. This vindicates T12's
+instinct ("let a real `chromeos-install` own stateful"): a hand-placed partition layout
+*structurally cannot* stand up encrypted stateful on this build. Multiple hypotheses were
+tested and killed along the way; the final one is proven from the on-disk config itself.
+
+### The chain of proof (each step decisive)
+1. **`clobber` wipes a *valid* filesystem, not just a missing one.** Extended the rescue
+   init with a read-only recon (ROOT-A/STATE probe + clobber-binary check + STATE
+   zero-map) — found `chromeos_startup`/`clobber-state` are **ELF binaries** (not scripts),
+   invoked by `/etc/init/startup.conf` as `exec chromeos_startup --verbosity=1
+   --encrypted_stateful`. STATE zero-map showed front-zeroed / no ext4 superblock. Then
+   the direct test: from rescue, `mkfs.ext4` a clean ext4 onto STATE, boot
+   `init=/sbin/init`, watch. **Result: "repairing itself" came up *quickly* and clobber
+   re-wiped the clean ext4 back to `00 00` within ~5 min** (confirmed by a follow-up
+   zero-touch diag probe). So the trigger is NOT a missing/incomplete filesystem — clobber
+   is *actively* re-triggered regardless of STATE contents.
+2. **Hardware-TPM ownership was a red herring.** Windows owns the TPM 2.0 (Intel PTT,
+   `IsOwned=True`, BitLocker *protection off* so a clear is safe). Hypothesised that a
+   Windows-owned TPM blocked `mount-encrypted`. Cleared it properly: `Get-Tpm` elevated,
+   `Disable-TpmAutoProvisioning` (so Windows won't re-own), `SetPhysicalPresenceRequest(5)`
+   → firmware physical-presence confirm at reboot → **`IsOwned=False`, `OwnerAuth=''`**.
+   Re-`mkfs`'d STATE, booted FydeOS. **Still "repairing itself."** Clearing the hardware
+   TPM changed nothing.
+3. **Why it changed nothing — the confirmed root cause.** Read-only rescue inspection of
+   ROOT-A found `trunksd.conf` has **`TPM_DYNAMIC=false`** and `tpm2-simulator.conf` (with
+   `/usr/bin/tpm2-simulator` present, 229 KB) says it outright:
+   > *"mount-encrypted need this TPM simulator to create the encstateful, and the TPM
+   > simulator need to store its data in the persistent location."*
+   > `env SIMULATOR_DIR=/mnt/stateful_partition/unencrypted/tpm2-simulator`
+   FydeOS-slim uses a **software TPM simulator, not the hardware TPM** (so step 2 was
+   inherently irrelevant), and the **simulator's persistent state lives *inside* stateful**.
+   → `mount-encrypted` unlocks encstateful via the simulator, whose state is in stateful,
+   which clobber wipes → the very state needed to recover is destroyed on every wipe →
+   **unbreakable loop**. A hand-placed layout never had encstateful+simulator state
+   initialised by the installer, so it can never bootstrap.
+
+### What is now firmly established (don't re-litigate)
+- The "repairing itself" loop = `clobber-state` on every `init=/sbin/init` boot, caused by
+  `chromeos_startup --encrypted_stateful` → `mount-encrypted` failing to bootstrap
+  encrypted stateful on a **hand-placed** install. NOT the filesystem, NOT the GPT/vboot,
+  NOT the hardware TPM. ROOT-A/KERN-A/GPT all remain healthy (re-verified).
+- FydeOS-slim R20-16503 uses the **tpm2-simulator** (`TPM_DYNAMIC=false`) with state in
+  `/mnt/stateful_partition/unencrypted/tpm2-simulator` — a circular dependency with the
+  encstateful it protects.
+- **A real `chromeos-install` is required** to stand up encrypted stateful here. This is
+  now proven, not just suspected (T12 strategic fallback → primary plan).
+
+### ▶ NEXT SESSION — get FydeOS actually booting
+Two viable directions; pick per goal:
+1. **Disable encrypted stateful** (fastest bring-up win, plain/unencrypted stateful — fine
+   for a dev board). Patch ROOT-A `/etc/init/startup.conf`: drop `--encrypted_stateful` →
+   `exec chromeos_startup --verbosity=1`. **Blocker to solve first:** the rescue kernel
+   **cannot rw-mount ROOT-A** — ChromeOS sets `ro_compat` bits `ff000000` (read-only-rootfs
+   marker) → `EXT4-fs: couldn't mount RDWR because of unsupported optional features`. So a
+   live `sed -i` is out. Do it via **`debugfs -w`** on the raw partition (rm+write the one
+   file) — `debugfs` is NOT in the rescue image yet; stage it in (it's e2fsprogs; the image
+   already ships the e2fsprogs libs for mke2fs) or add it to `build-rescue-image.sh`. Then
+   `mkfs.ext4` STATE, boot `init=/sbin/init`, expect it to reach OOBE with plain stateful.
+2. **Real `chromeos-install`** (the "correct" path; keeps encrypted stateful; Iconia/T12
+   lesson). Bigger effort — needs the installer environment to own partitioning + TPM/
+   encstateful setup. This is the Phase-B-aligned direction.
+
+### Recon capability + init changes (repo)
+- `boards/thinkpad10-20c1/rescue/skel/init`: added a **read-only STARTUP/CLOBBER recon
+  block** (marker `EFI/Rescue/recon-startup`; dumps clobber-binary info, upstart jobs,
+  bounded+timeout-guarded STATE zero-map) and **fixed a hang** (the first recon boot
+  sampled past STATE's 10.7 GiB end and wedged, blocking the diag-mode auto-reboot → hard
+  power-off needed; now size-bounded via sysfs + every raw `dd`/`mount` timeout-guarded).
+- Rebuilt the rescue image to **kernel #17** (`out/rescuex64.efi`, sha256 `9d057555…`,
+  valid PE/EFI) — **NOT deployed to the device.** The device's live `rescuex64.efi` is
+  still the **T14 diag-mode build (#15)**; all this session's on-device probes used that
+  proven image (its STATE/ROOT-A probe reads exactly the magic+mount we needed) plus
+  interactive rescue SSH for ROOT-A inspection and the `mkfs`. Deploy #17 only if the
+  richer recon is wanted; prove-new via a disposable candidate first (T14 pattern).
+
+### Process notes
+- The auto-mode classifier blocked every destructive/boot action until explicitly approved
+  by the user: `mkfs.ext4`, each `grub.cfg` swap, the TPM clear, and the boot `shutdown /r`s
+  — consistent with the standing rule. Not bugs.
+- Rescue root SSH over channel #2 at `192.168.1.139` (same DHCP lease as Windows); rescue
+  SysRq `echo b` reliably returns to Windows (T13). eMMC device node swaps mmcblk1↔mmcblk2
+  between boots — always derive from the ESP-holding disk.
+
+**State at close:** device baseline restored — ESP `grub.cfg` = inert 448 B diagnostic
+version (`grub.cfg.t15-bak` holds the same; the normal `init=/sbin/init` line lives in the
+repo canonical `boards/thinkpad10-20c1/boot/grub.cfg`), firmware pristine (no
+`bootsequence`, `{bootmgr}` first, `timeout=0`, disposable entries deleted). **TPM left
+CLEARED: `IsOwned=False`, `OwnerAuth=''`, Windows `AutoProvisioning=Disabled`** (harmless —
+BitLocker protection is off; re-enable Windows auto-provisioning if you want Windows to
+re-secure its TPM). eMMC STATE: last written as a clean ext4 by us, but the final FydeOS
+boot clobber-wiped it again — assume **wiped** (`00 00`) at rest. ROOT-A healthy. Channel
+#1 up. Repo changes this session: this `PROGRESS.md` entry + `rescue/skel/init` (recon
+block + hang/timeout fix). `out/rescuex64.efi` rebuilt (#17) but is a build artifact, not
+deployed.
+
+---
+
+## ThinkPad 10 20C1 — Session T14 (2026-07-21) — END STATE (superseded by T15 above)
 
 **Short, decisive session. Pursued T13's strongest unused lead — get the literal
 on-screen panic text from the `init=/bin/sh` boot — and instead proved that

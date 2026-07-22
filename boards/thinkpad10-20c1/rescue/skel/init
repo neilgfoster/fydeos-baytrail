@@ -80,6 +80,32 @@ if [ -n "$ESP_DEV" ]; then
   } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
 fi
 
+# --- ThinkPad10 STATE/ROOT-A probe (T14+): eMMC = whichever disk holds the ESP; the
+# mmcblkN prefix swaps between boots (confirmed 20x in boot-debug.log) but partition
+# indices are fixed by our GPT design (p6=ROOT-A, p15=STATE, KERN-A=p5 per PROGRESS
+# T9/T11). Read-only probes only - answers "is STATE wiped? does ROOT-A mount?" that the
+# rescue-kernel dmesg above can't. Read back over the Windows SSH channel from the ESP. ---
+if [ -n "$ESP_DEV" ]; then
+  EMMC="${ESP_DEV%p1}"; ROOTA="${EMMC}p6"; STATE="${EMMC}p15"
+  {
+    echo "=== thinkpad10 STATE/ROOT-A probe $(cat /proc/uptime 2>/dev/null) ==="
+    echo "eMMC=$EMMC  ROOT-A=$ROOTA  STATE=$STATE"
+    echo "--- sgdisk -p (GPT) ---";        sgdisk -p "$EMMC" 2>&1
+    echo "--- KERN-A attrs (p5) ---";      sgdisk -i 5 "$EMMC" 2>&1
+    echo "--- ROOT-A magic @1080 (53ef?)"; dd if="$ROOTA" bs=1 skip=1080 count=2 2>/dev/null | od -An -tx1 2>&1
+    echo "--- STATE  magic @1080 (53ef?)"; dd if="$STATE" bs=1 skip=1080 count=2 2>/dev/null | od -An -tx1 2>&1
+    echo "--- STATE first 64 bytes ---";   dd if="$STATE" bs=64 count=1 2>/dev/null | od -An -tx1 2>&1
+    mkdir -p /mnt/roota /mnt/state
+    if mount -t ext4 -o ro "$ROOTA" /mnt/roota 2>&1; then
+      grep -E 'RELEASE_(VERSION|BUILDER)' /mnt/roota/etc/lsb-release 2>&1
+      ls -l /mnt/roota/sbin/init 2>&1; umount /mnt/roota
+    else echo "ROOT-A ro mount FAILED"; fi
+    if mount -t ext4 -o ro "$STATE" /mnt/state 2>&1; then
+      ls -la /mnt/state 2>&1; umount /mnt/state
+    else echo "STATE ro mount FAILED (consistent with wiped superblock)"; fi
+  } >> /mnt/esp/EFI/Rescue/boot-debug.log 2>&1
+fi
+
 # --- WiFi: always interactive, never baked in or persisted ---
 printf "Join WiFi now? [Y/n] "
 read -r ans

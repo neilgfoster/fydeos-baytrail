@@ -78,40 +78,70 @@ trying to read the screen. Five attempts across sessions, zero characters.**
   **ESP** (`S:\EFI\FydeOS\grub.cfg`), never the repo's canonical
   `boards/thinkpad10-20c1/boot/grub.cfg`.
 
-### ▶ NEXT SESSION — chosen direction: eMMC diagnostic → ESP log (user decision, T14)
-0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
-1. **Build a minimal diagnostic root on a spare eMMC partition** (e.g. ROOT-B or another
-   empty one from T8/T9 — pick by identity, not assumed index): format ext4, populate
-   with a static busybox (from the rescue image) as init + a diagnostic script.
-2. The script must: capture `uname`/`cmdline`/`dmesg`/`mounts`/block-device listing,
-   **mount the FAT ESP read-write and write the log there** (the ESP is directly
-   readable from Windows over channel #1 — no rescue boot needed to retrieve it, unlike
-   T13), `sync`, then SysRq-reboot. Retrieval is then just reading a file from `S:` in
-   Windows.
-3. **Avoid T13's confounders by design**: everything on eMMC (no USB stick → no
-   firmware-enumeration black-screen hang, no USB-root-mount uncertainty); and **do NOT
-   hardcode `mmcblk*` device paths** — the eMMC/SD node numbering swaps unpredictably
-   between boots (T8/T9/T10), so identify the eMMC by boot0/boot1/rpmb at runtime, same
-   pattern used everywhere else in this project.
-4. This is multiple eMMC writes (format a partition + populate a rootfs) → needs its own
-   plan + **full literal file content shown as its own message** + explicit sign-off per
-   the standing rule (`[[feedback_plan-before-executing-disk-changes]]`).
-5. If eMMC-diag evidence *still* doesn't crack the "repairing itself"/STATE-wipe root
-   cause: the strategic fallback remains **letting the real `chromeos-install` own
-   partitioning/STATE** (the Iconia lesson from T12) — deferred, not chosen, this session.
+### 🟢 T14 continued (session resumed same day) — diagnostic capability PROVEN, STATE-wipe directly confirmed
+The session was reopened after the close above. Instead of building a from-scratch eMMC
+diagnostic root (the chosen option), recon found a **strictly-safer realization of the
+same "diag → ESP log" goal**: the rescue image's own init *already* writes a diagnostic
+log to the ESP (`EFI/Rescue/boot-debug.log`, readable from Windows over channel #1) on
+every boot — proven plumbing, **zero eMMC writes**. Extended that existing diagnostics
+block (`boards/thinkpad10-20c1/rescue/skel/init`, +26 lines) with a **read-only
+ROOT-A/STATE/GPT probe**: identifies the eMMC as whichever disk holds the ESP (handling
+the mmcblkN swap), then dumps `sgdisk -p`, KERN-A attrs, ROOT-A/STATE ext4 superblock
+magic, and ro-mount attempts of both.
 
-**State at session close:** repo: this `PROGRESS.md` entry only (verify with
-`git status` — canonical `boards/thinkpad10-20c1/boot/grub.cfg` untouched). eMMC ESP
-`EFI/FydeOS/grub.cfg`: holds the **T14 console-visibility diagnostic version** (448 B,
-`init=/bin/sh panic=0 … console=tty0 ignore_loglevel earlyprintk=efi,keep …`) — left
-mid-experiment, harmless (only boots when the disposable entry is armed). Backups on the
-ESP now: `grub.cfg.t12bak`, `.t12c-bak`, `.t12d-bak`, `.t12e-bak`, `.t13-isolating-bak`,
-`.t14bak` (400 B, pre-T14 eMMC-root `init=/bin/sh`), `.t14-panic0-bak` (407 B). eMMC
-ROOT-A/STATE: untouched all session (STATE still wiped from before T12). Firmware:
-pristine Windows default + persistent `Rescue Recovery` + disposable `{6ab61191-…}`
-(unarmed, `bootsequence` self-consumed), `timeout=0`. Disk 0 Online/Healthy,
-62,537,072,640 B. ESP unmounted (`S:` letter removed). Channel #1 confirmed healthy at
-close. DIAG USB stick: still unplugged.
+Rebuilt the rescue image (kernel #14, valid PE/EFI, 24,847,360 B, sha256 `25e8e15a…`),
+staged as candidate `rescuex64-t14.efi` (byte-verified; proven `rescuex64.efi`
+untouched), boot-tested via disposable entry `{6ab61192}` (user rescue-booted + joined
+WiFi). **Verified end-to-end over channel #2** (dropbear SSH into the candidate, no
+regression) and read the fresh probe straight from the log. Then SysRq'd back to Windows
+and **promoted** the candidate (old T9 build → `rescuex64-t9proven.efi.bak`), deleted the
+disposable entry, restored the clean firmware baseline.
+
+**🎯 Findings — first direct disk-based evidence this project has ever captured:**
+- **STATE is confirmed WIPED** — ext4 magic `00 00` (not `53 ef`), first 64 bytes
+  all-zero, ro-mount fails `Invalid argument`. Directly confirms T12's hypothesis, and
+  shows STATE is *still* empty in T14 (nothing has rebuilt it).
+- **ROOT-A is healthy** — magic `53 ef`, mounts cleanly, `fydeos_slim
+  R20-16503.20.0 / 16503.20.22.10`, `/sbin/init` present (267,968 B). Not the problem.
+- **GPT + vboot bits correct** — all 15 partitions present exactly per PARTITION-DESIGN;
+  KERN-A (p5) attrs still `01FF000000000000` (T11's write survived).
+- **Net:** the "repairing itself" freeze is specifically about **STATE being empty and
+  unrebuilt** — not ROOT-A, not the GPT, not the vboot bits.
+
+**Capability unlocked:** we can now reliably capture read-only disk evidence from the
+device and read it from Windows, zero eMMC writes — the T12/T13 diagnostic deadlock is
+broken.
+
+### ▶ NEXT SESSION — root-cause the STATE non-rebuild
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. Environment is now fully characterized (STATE wiped; ROOT-A/GPT/vboot all fine). Open
+   question: **why does `clobber-state`/`chromeos_startup` wipe STATE but never
+   successfully rebuild it** before the ~15-min timeout during `init=/sbin/init` boots?
+   Neither a rescue probe nor an eMMC-diag root reproduces that (both run a different
+   init). Strongest lead: from the now-diagnostic-capable rescue image, **run the
+   stateful-setup path itself with output redirected to the ESP log** — mount ROOT-A ro +
+   STATE rw, chroot, invoke `chromeos_startup`/clobber's stateful build, capture
+   stdout/stderr to `boot-debug.log`. Design + sign-off first (writes to STATE).
+2. Cheaper thing to price first: **`mkfs.ext4` STATE cleanly from the rescue image**
+   (mount now trivially confirms it's empty/safe) and re-test the `init=/sbin/init` boot.
+   If it stops "repairing," wipe-without-rebuild was the whole story; if it re-wipes,
+   clobber is actively re-triggering → chase *why* (option 1).
+3. Strategic fallback unchanged: let the real `chromeos-install` own STATE/partitioning
+   (Iconia lesson, T12).
+
+**State at session close:** repo has **two tracked changes** committed this session —
+this `PROGRESS.md` entry and `boards/thinkpad10-20c1/rescue/skel/init` (+26-line
+ROOT-A/STATE/GPT probe, boot-tested + promoted). Rescue image (channel #2) upgraded:
+`rescuex64.efi` now includes the probe (sha256 `25e8e15a…`); prior T9 build kept as
+`rescuex64-t9proven.efi.bak` (plus older `-t4proven`/`-t6t7proven` baks) for instant
+rollback. eMMC ESP `EFI/FydeOS/grub.cfg`: still the console-visibility diagnostic version
+(inert unless a disposable entry is armed); grub.cfg backups unchanged from the earlier
+T14 close. eMMC ROOT-A: healthy FydeOS rootfs (re-verified this session). eMMC STATE:
+**still wiped** (now directly confirmed, not repaired). Firmware: pristine Windows default
++ persistent `Rescue Recovery` + disposable `{6ab61191-…}` (unarmed) — disposable
+`{6ab61192}` deleted, `bootsequence` clear, `timeout=0`. Disk 0 Online/Healthy,
+62,537,072,640 B. ESP unmounted. Channel #1 healthy at close. DIAG USB stick: still
+unplugged.
 
 ---
 

@@ -8,7 +8,114 @@
 
 # ACTIVE BOARD: Lenovo ThinkPad 10 (20C1) — new bring-up
 
-## ThinkPad 10 20C1 — Session T13 (2026-07-16) — END STATE (resume here)
+## ThinkPad 10 20C1 — Session T14 (2026-07-21) — END STATE (resume here)
+
+**Short, decisive session. Pursued T13's strongest unused lead — get the literal
+on-screen panic text from the `init=/bin/sh` boot — and instead proved that
+**display-based kernel diagnostics are a dead end on this device**. Two boot-test
+cycles (both SSH-armed from Windows, physical power-off to return) produced *zero*
+readable kernel text past GRUB's own "Booting" line, even with full console routing.
+This is a negative result but a genuinely useful one: it eliminates the entire
+screen-capture approach that three prior sessions kept circling, and — combined with
+T10–T12's proof that `init=/sbin/init` reaches the graphical "repairing itself" screen
+— pins down that the kernel/GRUB/ROOT-A-mount are all fine and the only thing broken is
+that the kernel's text console never reaches this panel in these minimal boots. Session
+ended by user request after choosing the next direction: an eMMC-resident diagnostic
+that writes evidence to the Windows-readable FAT ESP.**
+
+### 🔬 Boot #1 — `panic=0` to stop the reboot eating the text
+Starting `grub.cfg` on the ESP was already the eMMC-rooted `init=/bin/sh`
+variant (`root=PARTUUID=F2E33B09-C91E-4469-A3BB-6661E0367944`, = T12c's config; note
+this differs from the T13 close-note which said the ESP held the DIAG-stick-rooted
+"isolating" version — that content is preserved as `grub.cfg.t13-isolating-bak`, but the
+*live* file was the eMMC-root one). Every prior attempt was defeated by the near-instant
+reboot flashing the text away, so the single-variable change was **add `panic=0`** — the
+kernel then halts on panic instead of rebooting, leaving whatever message on screen
+indefinitely. Backed up prior file as `grub.cfg.t14bak` (byte-verified, 400 B → new
+407 B), armed the disposable `{6ab61191-…}` one-time `bootsequence`, rebooted via
+`shutdown /r` over SSH.
+**Result: froze showing only GRUB's `Booting 'FydeOS A (ThinkPad10 20C1)'` line + a
+frozen cursor — nothing else.** No kernel output at all. Leading suspect: the cmdline's
+**empty `console=` token** (inherited verbatim from the stock FydeOS boot line) mutes
+kernel console output to the display.
+
+### 🔬 Boot #2 — full console routing, still nothing
+Single-purpose follow-up, all changes serving "make the kernel talk to the screen":
+`console=` → **`console=tty0`**, added **`ignore_loglevel`** + `loglevel=7`→`8`, added
+**`earlyprintk=efi,keep`**, kept `panic=0`. Backed up the panic=0 file as
+`grub.cfg.t14-panic0-bak` (407 B), wrote the new 448 B version (readback-verified),
+re-armed, rebooted.
+**Result: no difference — identical `Booting 'FydeOS A'` + frozen cursor, zero kernel
+text.** This is the decisive part: `earlyprintk=efi` writes straight to the UEFI
+framebuffer *before any driver loads*, so if the kernel were executing C code at all it
+would have emitted **something**. Getting literally nothing, while `init=/sbin/init`
+reliably reaches graphical userspace on this same GRUB+kernel+root, means the kernel
+runs but its **text console is simply never routed to this panel** in these boots
+(suspected: i915 modeset owns the display and no fbcon/efifb text path survives to it;
+`earlyprintk=efi` also apparently non-functional on this build). **Conclusion: stop
+trying to read the screen. Five attempts across sessions, zero characters.**
+
+### What is now firmly established (don't re-litigate)
+- GRUB + `vmlinuz.A` + `root=PARTUUID=<eMMC ROOT-A>` **boot the kernel and mount root
+  and run userspace** — proven by `init=/sbin/init` reaching the graphical "repairing
+  itself" screen (T10–T12), not in doubt.
+- **Display/console capture from a minimal boot is unavailable on this hardware** —
+  independent of `console=`, `earlyprintk=`, `loglevel=`, `panic=` (T14). Any future
+  evidence-gathering must be **disk-based**, not screen-based.
+- `panic=0` *does* work as intended (converts the reboot into a persistent freeze) — it
+  just froze on a blank/GRUB screen because there was no console text to preserve.
+
+### Process notes
+- Both reboots were driven by `shutdown /r /t 0` over channel #1 (SSH to Windows), not
+  SysRq — Windows→test-entry direction. Return path was **physical hard power-off** each
+  time (with `panic=0` the kernel no longer self-reboots, so the tablet sits frozen until
+  powered off; `bootsequence` is already firmware-consumed at selection, so power-on
+  lands in Windows automatically — confirmed both cycles).
+- The auto-mode classifier **blocked the 2nd `shutdown /r`** until the user explicitly
+  approved it (the 1st had gone through) — consistent with the standing rule that
+  boot-order/SSH-dropping actions need fresh explicit sign-off. Noted, not a bug.
+- No repo files changed this session except this log — all boot-config edits were to the
+  **ESP** (`S:\EFI\FydeOS\grub.cfg`), never the repo's canonical
+  `boards/thinkpad10-20c1/boot/grub.cfg`.
+
+### ▶ NEXT SESSION — chosen direction: eMMC diagnostic → ESP log (user decision, T14)
+0. `scripts/thinkpad-ssh.sh` first — confirm channel #1 live.
+1. **Build a minimal diagnostic root on a spare eMMC partition** (e.g. ROOT-B or another
+   empty one from T8/T9 — pick by identity, not assumed index): format ext4, populate
+   with a static busybox (from the rescue image) as init + a diagnostic script.
+2. The script must: capture `uname`/`cmdline`/`dmesg`/`mounts`/block-device listing,
+   **mount the FAT ESP read-write and write the log there** (the ESP is directly
+   readable from Windows over channel #1 — no rescue boot needed to retrieve it, unlike
+   T13), `sync`, then SysRq-reboot. Retrieval is then just reading a file from `S:` in
+   Windows.
+3. **Avoid T13's confounders by design**: everything on eMMC (no USB stick → no
+   firmware-enumeration black-screen hang, no USB-root-mount uncertainty); and **do NOT
+   hardcode `mmcblk*` device paths** — the eMMC/SD node numbering swaps unpredictably
+   between boots (T8/T9/T10), so identify the eMMC by boot0/boot1/rpmb at runtime, same
+   pattern used everywhere else in this project.
+4. This is multiple eMMC writes (format a partition + populate a rootfs) → needs its own
+   plan + **full literal file content shown as its own message** + explicit sign-off per
+   the standing rule (`[[feedback_plan-before-executing-disk-changes]]`).
+5. If eMMC-diag evidence *still* doesn't crack the "repairing itself"/STATE-wipe root
+   cause: the strategic fallback remains **letting the real `chromeos-install` own
+   partitioning/STATE** (the Iconia lesson from T12) — deferred, not chosen, this session.
+
+**State at session close:** repo: this `PROGRESS.md` entry only (verify with
+`git status` — canonical `boards/thinkpad10-20c1/boot/grub.cfg` untouched). eMMC ESP
+`EFI/FydeOS/grub.cfg`: holds the **T14 console-visibility diagnostic version** (448 B,
+`init=/bin/sh panic=0 … console=tty0 ignore_loglevel earlyprintk=efi,keep …`) — left
+mid-experiment, harmless (only boots when the disposable entry is armed). Backups on the
+ESP now: `grub.cfg.t12bak`, `.t12c-bak`, `.t12d-bak`, `.t12e-bak`, `.t13-isolating-bak`,
+`.t14bak` (400 B, pre-T14 eMMC-root `init=/bin/sh`), `.t14-panic0-bak` (407 B). eMMC
+ROOT-A/STATE: untouched all session (STATE still wiped from before T12). Firmware:
+pristine Windows default + persistent `Rescue Recovery` + disposable `{6ab61191-…}`
+(unarmed, `bootsequence` self-consumed), `timeout=0`. Disk 0 Online/Healthy,
+62,537,072,640 B. ESP unmounted (`S:` letter removed). Channel #1 confirmed healthy at
+close. DIAG USB stick: still unplugged.
+
+---
+
+## ThinkPad 10 20C1 — Session T13 (2026-07-16) — END STATE (superseded by T14 above)
 
 **Continuation of T12's diagnostic-capture work. Two real, opposite-direction outcomes:
 a genuine process breakthrough (rescue↔Windows cycling no longer needs a physical
